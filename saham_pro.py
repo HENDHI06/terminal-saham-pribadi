@@ -8,6 +8,7 @@ import sqlite3
 import warnings
 import os
 import requests 
+import pytz  # <-- TAMBAHAN: Untuk sinkronisasi waktu Indonesia
 
 # --- 0. CONFIG & DATABASE SETUP ---
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -33,11 +34,14 @@ def get_visitor_info():
             region = response.get('region', 'Unknown') or response.get('regionName', 'Unknown')
             if ip != 'Unknown': return ip, f"{city}, {region}"
         except: continue
-    return "Localhost", "Internal Network"
+    return "Cloud Node", "Data Center"
 
 def update_login_info(u):
     ip, loc = get_visitor_info()
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # --- FIX JAM INDONESIA ---
+    tz = pytz.timezone('Asia/Jakarta') 
+    now = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
+    # -------------------------
     conn = sqlite3.connect('users.db')
     c = conn.cursor()
     c.execute("UPDATE users SET last_login=?, ip_address=?, location=? WHERE username=?", (now, ip, loc, u))
@@ -83,7 +87,7 @@ def update_password_db(u, new_p):
 
 init_db()
 
-# --- 1. CYBER-GLOW STYLING (FULL CSS) ---
+# --- 1. CYBER-GLOW STYLING ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
@@ -97,15 +101,11 @@ st.markdown("""
     section[data-testid="stSidebar"] { background-color: rgba(10, 12, 16, 0.95); border-right: 1px solid #ccff0033; }
     h1, h2, h3, .stSubheader { color: #ccff00 !important; text-shadow: 0 0 10px rgba(204, 255, 0, 0.3); }
     
-    /* Green Neon Buttons */
     .stButton>button {
         background: linear-gradient(45deg, #ccff00, #9fcc00) !important;
         color: black !important; font-weight: bold !important; border-radius: 8px !important; border: none !important;
-        transition: 0.3s all ease;
     }
-    .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 0 15px rgba(204, 255, 0, 0.5); }
     
-    /* Red Neon Button (Special for Delete) */
     div.stButton > button[kind="secondary"] {
         background: linear-gradient(45deg, #ff4b4b, #8b0000) !important;
         color: white !important; border: none !important;
@@ -151,7 +151,7 @@ def run_scan(tickers, mode):
     status_ui = st.empty(); p_bar = st.progress(0)
     for i in range(0, len(tickers), 30):
         batch = tickers[i:i+30]
-        status_ui.caption(f"DECRYPTING MARKET DATA: {i}/{len(tickers)}")
+        status_ui.caption(f"SCANNING MARKET: {i}/{len(tickers)}")
         p_bar.progress(min(i / len(tickers), 1.0))
         try:
             data = yf.download(batch, period="6d", interval="1d", group_by='ticker', progress=False, auto_adjust=True)
@@ -182,15 +182,13 @@ user_now = st.session_state["auth"]["user"]
 st.sidebar.markdown(f"<div style='padding:15px; border:1px solid #ccff0033; border-radius:10px; background:rgba(204,255,0,0.05); margin-bottom:10px;'><h3 style='margin:0; color:#ccff00;'>{user_now.upper()}</h3><p style='margin:0; font-size:10px; color:#888;'>NODE ACTIVE</p></div>", unsafe_allow_html=True)
 menu = st.sidebar.radio("COMMAND CENTER", ["STRATEGY SCANNER", "USER MANAGEMENT", "SECURITY SETTINGS"] if role == "admin" else ["STRATEGY SCANNER", "SECURITY SETTINGS"])
 
-st.sidebar.markdown("---")
 if st.sidebar.button("🔴 TERMINATE SESSION", width="stretch"):
     st.session_state["auth"] = {"logged_in": False}; st.rerun()
 
-# --- 5. MAIN CONTENT ---
+# --- 5. CONTENT ---
 if menu == "STRATEGY SCANNER":
     st.title("🛰️ MARKET_INTELLIGENCE")
     
-    # IHSG Real-time Info
     try:
         ihsg_ticker = yf.Ticker("^JKSE")
         ihsg_hist = ihsg_ticker.history(period="2d")
@@ -199,105 +197,65 @@ if menu == "STRATEGY SCANNER":
             diff = curr_c - prev_c
             pct = (diff / prev_c) * 100
             clr = "#ccff00" if diff >= 0 else "#ff4b4b"
-            st.markdown(f"<div class='status-box' style='border-left-color:{clr} !important;'><p style='margin:0; color:#888; font-size:12px;'>IHSG COMPOSITE</p><h2 style='margin:0; color:{clr};'>{curr_c:,.2f}</h2><p style='margin:0; color:{clr}; font-weight:bold;'>{diff:+.2f} ({pct:.2f}%)</p></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='status-box' style='border-left-color:{clr} !important;'>IHSG: <span style='color:{clr}; font-weight:bold;'>{curr_c:,.2f} ({diff:+.2f})</span></div>", unsafe_allow_html=True)
     except: pass
 
-    # Sync Button
-    if st.button("🔄 SYNC_LATEST_DATA", width="stretch"):
-        st.rerun()
+    if st.button("🔄 SYNC_LATEST_DATA", width="stretch"): st.rerun()
 
     st.divider()
-    
-    # Scanner Configuration
-    with st.container():
-        st.markdown("### ⚙️ SCAN_PROTOCOL")
-        mode_scan = st.radio("ALGO_SENSITIVITY", ["Ketat", "Agresif"], horizontal=True)
-        if st.button("⚡ EXECUTE_DEEP_SCAN", width="stretch"):
-            st.session_state.results = run_scan(load_tickers(), mode_scan)
-            st.session_state.scan_time = datetime.now().strftime("%H:%M:%S")
+    mode_scan = st.radio("ALGO_SENSITIVITY", ["Ketat", "Agresif"], horizontal=True)
+    if st.button("⚡ EXECUTE_DEEP_SCAN", width="stretch"):
+        st.session_state.results = run_scan(load_tickers(), mode_scan)
+        # Fix Jam Scan juga ke WIB
+        tz = pytz.timezone('Asia/Jakarta')
+        st.session_state.scan_time = datetime.now(tz).strftime("%H:%M:%S")
 
-    # Display Results
     if 'results' in st.session_state:
         df = st.session_state.results
         if not df.empty:
-            st.markdown(f"<p class='last-time-tag'>[LOG]: Scan completed at {st.session_state.scan_time}</p>", unsafe_allow_html=True)
-            sel_t = st.selectbox("FOCUS_TARGET_ASSET", df['TICKER'].tolist())
+            st.markdown(f"<p class='last-time-tag'>[WIB]: Last Scan at {st.session_state.scan_time}</p>", unsafe_allow_html=True)
+            sel_t = st.selectbox("FOCUS_TARGET", df['TICKER'].tolist())
+            st.dataframe(df.drop(columns=['FULL']), width="stretch", hide_index=True)
             
-            st.dataframe(df.drop(columns=['FULL']), width="stretch", hide_index=True, column_config={
-                "CHG%": st.column_config.NumberColumn(format="%.2f%%"),
-                "TREND": st.column_config.LineChartColumn("5D_VELOCITY"),
-                "VAL(M)": st.column_config.ProgressColumn("Value(M)", min_value=0, max_value=df["VAL(M)"].max())
-            })
-            
-            # Advanced Charting
-            st.divider()
-            st.subheader(f"👁️ MONITORING: {sel_t}")
+            # Detailed Chart
             full_t = df[df['TICKER'] == sel_t]['FULL'].values[0]
             chart_data = yf.download(full_t, period="6mo", interval="1d", progress=False, auto_adjust=True)
             chart_data.columns = [c[0] if isinstance(c, tuple) else c for c in chart_data.columns]
-            
-            # Technical Indicators
-            chart_data['MA20'] = chart_data['Close'].rolling(window=20).mean()
-            chart_data['MA50'] = chart_data['Close'].rolling(window=50).mean()
-            delta = chart_data['Close'].diff()
-            gain = (delta.where(delta > 0, 0)).rolling(14).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+            chart_data['MA20'] = chart_data['Close'].rolling(20).mean()
+            delta = chart_data['Close'].diff(); gain = (delta.where(delta > 0, 0)).rolling(14).mean(); loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
             chart_data['RSI'] = 100 - (100 / (1 + (gain/loss)))
 
-            # Subplots
             fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_width=[0.2, 0.15, 0.65])
-            
-            # Price + MA
-            fig.add_trace(go.Candlestick(x=chart_data.index, open=chart_data['Open'], high=chart_data['High'], low=chart_data['Low'], close=chart_data['Close'], increasing_line_color='#ccff00', decreasing_line_color='#ff4b4b', name="Price"), row=1, col=1)
-            fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['MA20'], line=dict(color='#ffcc00', width=1), name="MA20"), row=1, col=1)
-            fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['MA50'], line=dict(color='#00d4ff', width=1), name="MA50"), row=1, col=1)
-            
-            # Volume
-            vol_clr = ['#ccff00' if chart_data['Close'][i] >= chart_data['Open'][i] else '#ff4b4b' for i in range(len(chart_data))]
-            fig.add_trace(go.Bar(x=chart_data.index, y=chart_data['Volume'], marker_color=vol_clr, opacity=0.4, name="Vol"), row=2, col=1)
-            
-            # RSI
-            fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['RSI'], line=dict(color='#ff00ff', width=1.5), name="RSI"), row=3, col=1)
-            fig.add_hline(y=70, line_dash="dot", line_color="red", row=3, col=1)
-            fig.add_hline(y=30, line_dash="dot", line_color="cyan", row=3, col=1)
-
-            fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=850, margin=dict(l=10, r=10, t=20, b=10), showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            fig.add_trace(go.Candlestick(x=chart_data.index, open=chart_data['Open'], high=chart_data['High'], low=chart_data['Low'], close=chart_data['Close'], name="Price"), row=1, col=1)
+            fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['MA20'], line=dict(color='#ffcc00'), name="MA20"), row=1, col=1)
+            fig.add_trace(go.Bar(x=chart_data.index, y=chart_data['Volume'], name="Vol", opacity=0.4), row=2, col=1)
+            fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['RSI'], line=dict(color='#ff00ff'), name="RSI"), row=3, col=1)
+            fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=800, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
             st.plotly_chart(fig, width="stretch")
 
 elif menu == "USER MANAGEMENT":
-    st.title("👤 ACCESS_CONTROL_PROTOCOL")
+    st.title("👤 ACCESS_CONTROL")
     conn = sqlite3.connect('users.db')
     df_u = pd.read_sql_query("SELECT username, role, last_login, location FROM users", conn)
     conn.close()
     st.dataframe(df_u, width="stretch", hide_index=True)
-    
     st.divider()
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("Add New Operator")
-        with st.form("add_user_form"):
-            nu, np, nr = st.text_input("Username"), st.text_input("Access Key", type="password"), st.selectbox("Role", ["user", "admin"])
-            if st.form_submit_button("GRANT ACCESS"):
-                if nu and np:
-                    if add_user_db(nu, np, nr): st.success(f"User {nu} Authorized."); st.rerun()
-                else: st.error("Fill all fields.")
-    
-    with col2:
+    c1, c2 = st.columns(2)
+    with c1:
+        st.subheader("Add Operator")
+        with st.form("add_u"):
+            nu, np, nr = st.text_input("Username"), st.text_input("Key", type="password"), st.selectbox("Role", ["user", "admin"])
+            if st.form_submit_button("GRANT"):
+                if add_user_db(nu, np, nr): st.success("Added"); st.rerun()
+    with c2:
         st.subheader("Revoke Access")
-        du = st.text_input("Target Username to Revoke")
+        du = st.text_input("Delete Username")
         if st.button("🔴 DELETE PERMANENTLY", width="stretch", type="secondary"):
-            if du == "admin": st.error("Root admin cannot be deleted.")
-            elif delete_user_db(du): st.warning(f"Access Revoked for {du}."); st.rerun()
-            else: st.error("User not found.")
+            if du != "admin" and delete_user_db(du): st.warning("Removed"); st.rerun()
 
 elif menu == "SECURITY SETTINGS":
     st.title("🔒 SECURITY_VAULT")
-    ip, loc = get_visitor_info()
-    st.info(f"CURRENT_NODE_IP: {ip} | LOCATION: {loc}")
-    with st.form("change_p"):
-        new_pass = st.text_input("NEW_ENCRYPTION_KEY", type="password")
-        conf_pass = st.text_input("CONFIRM_KEY", type="password")
-        if st.form_submit_button("UPDATE_ACCESS_KEY", width="stretch"):
-            if new_pass == conf_pass and new_pass != "":
-                if update_password_db(user_now, new_pass): st.success("Access Key Rotated Successfully.")
-            else: st.error("Key Mismatch or Empty.")
+    with st.form("p"):
+        new_p = st.text_input("NEW ACCESS KEY", type="password")
+        if st.form_submit_button("UPDATE", width="stretch"):
+            if update_password_db(user_now, new_p): st.success("Updated")
