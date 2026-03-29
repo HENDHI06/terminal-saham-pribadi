@@ -8,7 +8,7 @@ import sqlite3
 import warnings
 import os
 import requests 
-import pytz  # <-- TAMBAHAN: Untuk sinkronisasi waktu Indonesia
+import pytz 
 
 # --- 0. CONFIG & DATABASE SETUP ---
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -20,6 +20,14 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS users 
                  (username TEXT PRIMARY KEY, password TEXT, role TEXT, 
                   last_login TEXT, ip_address TEXT, location TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS portfolio 
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  username TEXT, ticker TEXT, buy_price REAL, 
+                  lots INTEGER, tp_price REAL, cl_price REAL, date TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS history 
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  username TEXT, ticker TEXT, buy_price REAL, 
+                  sell_price REAL, lots INTEGER, pnl REAL, date TEXT)''')
     c.execute("INSERT OR IGNORE INTO users (username, password, role) VALUES ('admin', 'admin123', 'admin')")
     conn.commit()
     conn.close()
@@ -38,15 +46,21 @@ def get_visitor_info():
 
 def update_login_info(u):
     ip, loc = get_visitor_info()
-    # --- FIX JAM INDONESIA ---
     tz = pytz.timezone('Asia/Jakarta') 
     now = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
-    # -------------------------
     conn = sqlite3.connect('users.db')
     c = conn.cursor()
     c.execute("UPDATE users SET last_login=?, ip_address=?, location=? WHERE username=?", (now, ip, loc, u))
     conn.commit()
     conn.close()
+
+def get_sidebar_log(u):
+    conn = sqlite3.connect('users.db')
+    c = conn.cursor()
+    c.execute("SELECT last_login, ip_address, location FROM users WHERE username=?", (u,))
+    res = c.fetchone()
+    conn.close()
+    return res if res else ("-", "-", "-")
 
 def check_login_db(u, p):
     conn = sqlite3.connect('users.db')
@@ -56,14 +70,37 @@ def check_login_db(u, p):
     conn.close()
     return res[0] if res else None
 
+def add_to_portfolio(u, t, p, l, tp, cl):
+    conn = sqlite3.connect('users.db')
+    c = conn.cursor()
+    c.execute("INSERT INTO portfolio (username, ticker, buy_price, lots, tp_price, cl_price, date) VALUES (?, ?, ?, ?, ?, ?, ?)",
+              (u, t.upper().strip(), p, l, tp, cl, datetime.now().strftime("%Y-%m-%d")))
+    conn.commit(); conn.close()
+
+def sell_position(u, row_id, ticker, buy_p, sell_p, lots):
+    pnl = (sell_p - buy_p) * lots * 100
+    date_now = datetime.now().strftime("%Y-%m-%d")
+    conn = sqlite3.connect('users.db')
+    c = conn.cursor()
+    c.execute("INSERT INTO history (username, ticker, buy_price, sell_price, lots, pnl, date) VALUES (?, ?, ?, ?, ?, ?, ?)",
+              (u, ticker, buy_p, sell_p, lots, pnl, date_now))
+    c.execute("DELETE FROM portfolio WHERE id=?", (row_id,))
+    conn.commit(); conn.close()
+
+def get_user_portfolio(u, r):
+    conn = sqlite3.connect('users.db')
+    if r == 'admin':
+        df = pd.read_sql_query("SELECT * FROM portfolio ORDER BY date DESC", conn)
+    else:
+        df = pd.read_sql_query("SELECT * FROM portfolio WHERE username=? ORDER BY date DESC", conn, params=(u,))
+    conn.close(); return df
+
 def add_user_db(u, p, r):
     try:
         conn = sqlite3.connect('users.db')
         c = conn.cursor()
         c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", (u, p, r))
-        conn.commit()
-        conn.close()
-        return True
+        conn.commit(); conn.close(); return True
     except: return False
 
 def delete_user_db(u):
@@ -71,48 +108,66 @@ def delete_user_db(u):
     conn = sqlite3.connect('users.db')
     c = conn.cursor()
     c.execute("DELETE FROM users WHERE username=?", (u,))
-    conn.commit()
-    conn.close()
-    return True
+    conn.commit(); conn.close(); return True
 
 def update_password_db(u, new_p):
     try:
         conn = sqlite3.connect('users.db')
         c = conn.cursor()
         c.execute("UPDATE users SET password=? WHERE username=?", (new_p, u))
-        conn.commit()
-        conn.close()
-        return True
+        conn.commit(); conn.close(); return True
     except: return False
 
 init_db()
 
-# --- 1. CYBER-GLOW STYLING ---
+# --- 1. PRO CYBER STYLING (FIXED SIDEBAR BUTTON) ---
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
-    .stApp { background: radial-gradient(circle at top right, #0a192f, #05070a); font-family: 'JetBrains Mono', monospace; color: #e0e0e0; }
-    div[data-testid="stMetric"], .status-box, .stDataFrame, div[data-testid="stExpander"] {
-        background: rgba(255, 255, 255, 0.03) !important;
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(204, 255, 0, 0.2) !important;
-        border-radius: 15px !important;
-    }
-    section[data-testid="stSidebar"] { background-color: rgba(10, 12, 16, 0.95); border-right: 1px solid #ccff0033; }
-    h1, h2, h3, .stSubheader { color: #ccff00 !important; text-shadow: 0 0 10px rgba(204, 255, 0, 0.3); }
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@400;900&display=swap');
     
-    .stButton>button {
-        background: linear-gradient(45deg, #ccff00, #9fcc00) !important;
-        color: black !important; font-weight: bold !important; border-radius: 8px !important; border: none !important;
+    /* HANYA HILANGKAN DEPLOY DAN MENU TIGA TITIK */
+    /* Tombol Sidebar (Hamburger Menu) tetap dibiarkan muncul */
+    [data-testid="stHeaderActionElements"], .stDeployButton, #MainMenu {
+        display: none !important;
     }
     
-    div.stButton > button[kind="secondary"] {
-        background: linear-gradient(45deg, #ff4b4b, #8b0000) !important;
-        color: white !important; border: none !important;
+    header {
+        background-color: transparent !important;
     }
 
-    .status-box { padding: 20px; border-left: 5px solid #ccff00 !important; margin-bottom: 20px; }
-    .last-time-tag { font-size: 12px; color: #ccff00; opacity: 0.8; margin-bottom: 10px; font-style: italic; }
+    /* BACKGROUND ART GRID */
+    .stApp {
+        background-color: #05070a;
+        background-image: 
+            linear-gradient(rgba(204, 255, 0, 0.02) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(204, 255, 0, 0.02) 1px, transparent 1px),
+            linear-gradient(rgba(204, 255, 0, 0.05) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(204, 255, 0, 0.05) 1px, transparent 1px),
+            radial-gradient(circle at center, rgba(10, 25, 47, 0.4), #05070a);
+        background-size: 20px 20px, 20px 20px, 100px 100px, 100px 100px, 100% 100%;
+        font-family: 'JetBrains Mono', monospace;
+        color: #e0e0e0;
+    }
+
+    /* CONTAINERS */
+    div[data-testid="stMetric"], .status-box, .stDataFrame, div[data-testid="stExpander"], .stTabs, .stForm {
+        background: rgba(0, 10, 20, 0.5) !important;
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(204, 255, 0, 0.15) !important;
+        border-radius: 10px !important;
+    }
+
+    h1 {
+        font-family: 'Orbitron', sans-serif;
+        background: linear-gradient(90deg, #ccff00, #00ffff);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    /* AGAR TOMBOL SIDEBAR WARNANYA NYALA (NEON) */
+    button[kind="header"] {
+        color: #ccff00 !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -169,7 +224,7 @@ def run_scan(tickers, mode):
                         results.append({
                             "TICKER": t.replace(".JK",""), "LAST": int(c_now), "CHG%": round(chg, 2), 
                             "ENTRY": f"{int(c_now)}-{int(c_now*1.01)}", "TP": int(c_now*1.03), "CL": int(c_now*0.98),
-                            "TREND": df_t['Close'].tolist(), "VAL(M)": round(val/1_000_000, 1), "FULL": t
+                            "VAL(M)": round(val/1_000_000, 1), "FULL": t
                         })
                 except: continue
         except: continue
@@ -179,8 +234,22 @@ def run_scan(tickers, mode):
 # --- 4. NAVIGATION ---
 role = st.session_state["auth"]["role"]
 user_now = st.session_state["auth"]["user"]
-st.sidebar.markdown(f"<div style='padding:15px; border:1px solid #ccff0033; border-radius:10px; background:rgba(204,255,0,0.05); margin-bottom:10px;'><h3 style='margin:0; color:#ccff00;'>{user_now.upper()}</h3><p style='margin:0; font-size:10px; color:#888;'>NODE ACTIVE</p></div>", unsafe_allow_html=True)
-menu = st.sidebar.radio("COMMAND CENTER", ["STRATEGY SCANNER", "USER MANAGEMENT", "SECURITY SETTINGS"] if role == "admin" else ["STRATEGY SCANNER", "SECURITY SETTINGS"])
+last_l, ip_l, loc_l = get_sidebar_log(user_now)
+
+st.sidebar.markdown(f"""
+    <div style='padding:15px; border:1px solid #ccff0033; border-radius:10px; background:rgba(204,255,0,0.05); margin-bottom:10px;'>
+        <h3 style='margin:0; color:#ccff00;'>{user_now.upper()}</h3>
+        <p style='margin:0; font-size:10px; color:#888;'>NODE ACTIVE | {role.upper()}</p>
+        <hr style='border:0.1px solid #ccff0022; margin:10px 0;'>
+        <p class='last-time-tag'>LST: {last_l}</p>
+        <p class='last-time-tag'>IP : {ip_l}</p>
+        <p class='last-time-tag'>LOC: {loc_l}</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+menu_list = ["STRATEGY SCANNER", "MONEY MANAGEMENT", "SECURITY SETTINGS"]
+if role == "admin": menu_list.insert(1, "USER MANAGEMENT")
+menu = st.sidebar.radio("COMMAND CENTER", menu_list)
 
 if st.sidebar.button("🔴 TERMINATE SESSION", width="stretch"):
     st.session_state["auth"] = {"logged_in": False}; st.rerun()
@@ -188,36 +257,42 @@ if st.sidebar.button("🔴 TERMINATE SESSION", width="stretch"):
 # --- 5. CONTENT ---
 if menu == "STRATEGY SCANNER":
     st.title("🛰️ MARKET_INTELLIGENCE")
-    
     try:
-        ihsg_ticker = yf.Ticker("^JKSE")
-        ihsg_hist = ihsg_ticker.history(period="2d")
+        ihsg_hist = yf.Ticker("^JKSE").history(period="2d")
         if len(ihsg_hist) >= 2:
             prev_c, curr_c = ihsg_hist['Close'].iloc[-2], ihsg_hist['Close'].iloc[-1]
             diff = curr_c - prev_c
-            pct = (diff / prev_c) * 100
             clr = "#ccff00" if diff >= 0 else "#ff4b4b"
             st.markdown(f"<div class='status-box' style='border-left-color:{clr} !important;'>IHSG: <span style='color:{clr}; font-weight:bold;'>{curr_c:,.2f} ({diff:+.2f})</span></div>", unsafe_allow_html=True)
     except: pass
 
-    if st.button("🔄 SYNC_LATEST_DATA", width="stretch"): st.rerun()
+    c_algo, c_sync = st.columns([4, 1])
+    with c_algo:
+        mode_scan = st.radio("ALGO_SENSITIVITY", ["Ketat", "Agresif"], horizontal=True)
+    with c_sync:
+        if st.button("🔄 REFRESH PRICE", use_container_width=True):
+            if 'results' in st.session_state and not st.session_state.results.empty:
+                current_tickers = [f"{t}.JK" for t in st.session_state.results['TICKER']]
+                try:
+                    new_data = yf.download(current_tickers, period="1d", progress=False)['Close']
+                    for idx, row in st.session_state.results.iterrows():
+                        tk = f"{row['TICKER']}.JK"
+                        st.session_state.results.at[idx, 'LAST'] = int(new_data[tk].iloc[-1]) if len(current_tickers) > 1 else int(new_data.iloc[-1])
+                    st.session_state.scan_time = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%H:%M:%S")
+                except: pass
+            st.rerun()
 
-    st.divider()
-    mode_scan = st.radio("ALGO_SENSITIVITY", ["Ketat", "Agresif"], horizontal=True)
     if st.button("⚡ EXECUTE_DEEP_SCAN", width="stretch"):
         st.session_state.results = run_scan(load_tickers(), mode_scan)
-        # Fix Jam Scan juga ke WIB
-        tz = pytz.timezone('Asia/Jakarta')
-        st.session_state.scan_time = datetime.now(tz).strftime("%H:%M:%S")
+        st.session_state.scan_time = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%H:%M:%S")
 
     if 'results' in st.session_state:
         df = st.session_state.results
         if not df.empty:
-            st.markdown(f"<p class='last-time-tag'>[WIB]: Last Scan at {st.session_state.scan_time}</p>", unsafe_allow_html=True)
+            st.markdown(f"<p class='last-time-tag'>[WIB]: Last Price Sync at {st.session_state.scan_time}</p>", unsafe_allow_html=True)
             sel_t = st.selectbox("FOCUS_TARGET", df['TICKER'].tolist())
-            st.dataframe(df.drop(columns=['FULL']), width="stretch", hide_index=True)
+            st.dataframe(df.drop(columns=['FULL']), use_container_width=True, hide_index=True)
             
-            # Detailed Chart
             full_t = df[df['TICKER'] == sel_t]['FULL'].values[0]
             chart_data = yf.download(full_t, period="6mo", interval="1d", progress=False, auto_adjust=True)
             chart_data.columns = [c[0] if isinstance(c, tuple) else c for c in chart_data.columns]
@@ -230,28 +305,142 @@ if menu == "STRATEGY SCANNER":
             fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['MA20'], line=dict(color='#ffcc00'), name="MA20"), row=1, col=1)
             fig.add_trace(go.Bar(x=chart_data.index, y=chart_data['Volume'], name="Vol", opacity=0.4), row=2, col=1)
             fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['RSI'], line=dict(color='#ff00ff'), name="RSI"), row=3, col=1)
-            fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=800, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-            st.plotly_chart(fig, width="stretch")
+            fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=600, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig, use_container_width=True)
+
+elif menu == "MONEY MANAGEMENT":
+    st.title("💰 MONEY_MANAGEMENT & HISTORY")
+    tab1, tab2 = st.tabs(["📈 ACTIVE PORTFOLIO", "📜 TRADING HISTORY"])
+
+    with tab1:
+        with st.expander("➕ ADD NEW POSITION", expanded=False):
+            with st.form("add_p"):
+                c1, c2, c3 = st.columns(3)
+                t_in = c1.text_input("Ticker (e.g. BBCA)")
+                p_in = c2.number_input("Buy Price", min_value=0.0)
+                l_in = c3.number_input("Lots", min_value=1)
+                if st.form_submit_button("SAVE POSITION"):
+                    if t_in: add_to_portfolio(user_now, t_in, p_in, l_in, 0, 0); st.rerun()
+
+        df_p = get_user_portfolio(user_now, role)
+        if not df_p.empty:
+            tickers = [f"{t}.JK" for t in df_p['ticker'].unique()]
+            try:
+                live_data = yf.download(tickers, period="1d", progress=False)['Close']
+                live_prices = live_data.iloc[-1].to_dict() if len(tickers) > 1 else {tickers[0]: live_data.iloc[-1]}
+            except: live_prices = {}
+
+            def calc_active(row):
+                tk = f"{row['ticker']}.JK"
+                curr = live_prices.get(tk, row['buy_price'])
+                if isinstance(curr, (pd.Series, pd.DataFrame)): curr = curr.iloc[0]
+                cost = float(row['buy_price'] * row['lots'] * 100)
+                val = float(curr * row['lots'] * 100)
+                return pd.Series([float(curr), cost, val, (val-cost)])
+
+            df_p[['Live', 'Cost', 'Value', 'P/L']] = df_p.apply(calc_active, axis=1)
+            
+            m1, m2, m3 = st.columns(3)
+            t_inv = df_p['Cost'].values.sum(); t_pl = df_p['P/L'].values.sum()
+            m1.metric("INVESTMENT", f"Rp {t_inv:,.0f}")
+            m2.metric("FLOATING P/L", f"Rp {t_pl:,.0f}", f"{(t_pl/t_inv*100 if t_inv!=0 else 0):.2f}%")
+            m3.metric("BALANCE", f"Rp {t_inv+t_pl:,.0f}")
+
+            st.write("### 🛠️ ACTION CENTER")
+            for i, row in df_p.iterrows():
+                with st.expander(f"MANAGE: {row['ticker']} ({row['lots']} Lots)"):
+                    col_sell, col_del = st.columns([3, 1])
+                    with col_sell:
+                        s_price = st.number_input(f"Harga Jual {row['ticker']}", value=float(row['Live']), key=f"s_{row['id']}")
+                        if st.button(f"🚀 KONFIRMASI JUAL {row['ticker']}", key=f"btn_s_{row['id']}", use_container_width=True):
+                            sell_position(user_now, row['id'], row['ticker'], row['buy_price'], s_price, row['lots'])
+                            st.success(f"{row['ticker']} Berhasil Dijual!"); st.rerun()
+                    with col_del:
+                        st.write("Salah Input?")
+                        if st.button("🗑️ HAPUS", key=f"btn_d_{row['id']}", use_container_width=True):
+                            conn = sqlite3.connect('users.db')
+                            conn.cursor().execute("DELETE FROM portfolio WHERE id=?", (row['id'],))
+                            conn.commit(); conn.close()
+                            st.warning("Data Dihapus"); st.rerun()
+
+            st.dataframe(df_p.drop(columns=['username','tp_price','cl_price']), use_container_width=True, hide_index=True)
+        else:
+            st.info("Belum ada posisi aktif.")
+
+    with tab2:
+        # --- BAGIAN TRADING HISTORY (GABUNGAN) ---
+        conn = sqlite3.connect('users.db')
+        df_h = pd.read_sql_query("SELECT * FROM history WHERE username=? ORDER BY date DESC", conn, params=(user_now,))
+        conn.close()
+        
+        if not df_h.empty:
+            df_h['date'] = pd.to_datetime(df_h['date'])
+            # Kalkulasi Persentase P/L per transaksi
+            df_h['P/L %'] = ((df_h['sell_price'] - df_h['buy_price']) / df_h['buy_price']) * 100
+            
+            st.subheader("📊 PERFORMANCE ANALYTICS")
+            
+            # Hitung Profit vs Cut Loss
+            win_trade = df_h[df_h['pnl'] > 0]
+            loss_trade = df_h[df_h['pnl'] <= 0]
+            total_profit = win_trade['pnl'].sum()
+            total_loss = loss_trade['pnl'].sum()
+            net_pnl = total_profit + total_loss
+            
+            s1, s2, s3 = st.columns(3)
+            s1.metric("TOTAL PROFIT", f"Rp {total_profit:,.0f}")
+            s2.metric("TOTAL CUT LOSS", f"Rp {total_loss:,.0f}", delta_color="inverse")
+            s3.metric("NET REALIZED", f"Rp {net_pnl:,.0f}")
+
+            # Grafik Trend
+            m_stats = df_h.copy()
+            m_stats['Month'] = m_stats['date'].dt.strftime('%b %Y')
+            m_stats = m_stats.groupby(['Month', df_h['date'].dt.month]).agg({'pnl': 'sum'}).reset_index().sort_values('date')
+            fig_h = go.Figure(go.Bar(
+                x=m_stats['Month'], 
+                y=m_stats['pnl'], 
+                marker_color=['#ccff00' if x >= 0 else '#ff4b4b' for x in m_stats['pnl']],
+                text=[f"Rp {x:,.0f}" for x in m_stats['pnl']],
+                textposition='outside'
+            ))
+            fig_h.update_layout(template="plotly_dark", height=350, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_h, use_container_width=True)
+
+            st.write("### 📝 TRANSACTION LOG")
+            for idx, h_row in df_h.iterrows():
+                pnl_color = "#ccff00" if h_row['pnl'] >= 0 else "#ff4b4b"
+                # Menampilkan Label Persentase di judul expander
+                with st.expander(f"{h_row['date'].strftime('%Y-%m-%d')} | {h_row['ticker']} | P/L: {h_row['P/L %']:.2f}%"):
+                    c_h1, c_h2, c_h3 = st.columns(3)
+                    c_h1.write(f"**Beli:** {h_row['buy_price']:,.0f}")
+                    c_h2.write(f"**Jual:** {h_row['sell_price']:,.0f}")
+                    c_h3.write(f"**Net:** Rp {h_row['pnl']:,.0f}")
+                    
+                    if st.button(f"🗑️ Hapus Record {h_row['id']}", key=f"del_h_{h_row['id']}", use_container_width=True):
+                        conn = sqlite3.connect('users.db')
+                        conn.cursor().execute("DELETE FROM history WHERE id=?", (h_row['id'],))
+                        conn.commit(); conn.close(); st.rerun()
+            
+            st.dataframe(df_h.drop(columns=['id', 'username']), use_container_width=True, hide_index=True)
+        else:
+            st.info("Belum ada riwayat penjualan.")
 
 elif menu == "USER MANAGEMENT":
     st.title("👤 ACCESS_CONTROL")
     conn = sqlite3.connect('users.db')
     df_u = pd.read_sql_query("SELECT username, role, last_login, location FROM users", conn)
     conn.close()
-    st.dataframe(df_u, width="stretch", hide_index=True)
-    st.divider()
+    st.dataframe(df_u, use_container_width=True, hide_index=True)
     c1, c2 = st.columns(2)
     with c1:
-        st.subheader("Add Operator")
         with st.form("add_u"):
             nu, np, nr = st.text_input("Username"), st.text_input("Key", type="password"), st.selectbox("Role", ["user", "admin"])
-            if st.form_submit_button("GRANT"):
+            if st.form_submit_button("GRANT ACCESS"):
                 if add_user_db(nu, np, nr): st.success("Added"); st.rerun()
     with c2:
-        st.subheader("Revoke Access")
-        du = st.text_input("Delete Username")
-        if st.button("🔴 DELETE PERMANENTLY", width="stretch", type="secondary"):
-            if du != "admin" and delete_user_db(du): st.warning("Removed"); st.rerun()
+        du = st.text_input("Revoke ID")
+        if st.button("🔴 DELETE PERMANENTLY", type="secondary"):
+            if delete_user_db(du): st.warning("Removed"); st.rerun()
 
 elif menu == "SECURITY SETTINGS":
     st.title("🔒 SECURITY_VAULT")
