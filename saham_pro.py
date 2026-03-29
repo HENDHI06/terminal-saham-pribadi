@@ -192,14 +192,29 @@ if not st.session_state["auth"]["logged_in"]:
     st.stop()
 
 # --- 3. DATA ENGINE ---
-@st.cache_data
+@st.cache_data(ttl=86400)
 def load_tickers():
-    file_path = "daftar_saham.xlsx"
-    if os.path.exists(file_path):
-        df = pd.read_excel(file_path)
-        col = 'Kode' if 'Kode' in df.columns else df.columns[1]
+    # TAHAP 1: Coba Ambil Otomatis (Internet)
+    try:
+        url = "https://raw.githubusercontent.com/datasets-id/idx-stocks/main/data/stock_codes.csv"
+        df_idx = pd.read_csv(url)
+        # Ambil kolom ticker, bersihkan spasi, jadikan uppercase, tambah .JK
+        tickers = [str(t).strip().upper() + ".JK" for t in df_idx['ticker'].tolist() if len(str(t)) <= 5]
+        if len(tickers) > 100: 
+            return tickers
+    except:
+        pass # Jika gagal koneksi, lanjut ke tahap 2
+
+    # TAHAP 2: Gunakan Excel (Pasti Ada)
+    try:
+        # Ganti 'daftar_saham.xlsx' sesuai nama file kamu di GitHub
+        df = pd.read_excel("daftar_saham.xlsx")
+        # Mencari kolom yang berisi kode saham (biasanya kolom pertama atau bernama 'Kode')
+        col = 'Kode' if 'Kode' in df.columns else df.columns[0]
         return [f"{str(t).strip().upper()}.JK" for t in df[col].tolist() if len(str(t)) <= 5]
-    return []
+    except Exception as e:
+        st.error(f"Error membaca Excel: {e}")
+        return []
 
 def run_scan(tickers, mode):
     results = []
