@@ -72,4 +72,39 @@ st.markdown("""
 
 # --- 2. AUTHENTICATION ---
 if "auth" not in st.session_state:
-    st.session_state["auth"]
+    st.session_state["auth"] = {"logged_in": False, "user": None, "role": None}
+
+if not st.session_state["auth"]["logged_in"]:
+    _, col2, _ = st.columns([1,1.5,1])
+    with col2:
+        st.markdown("<div style='text-align:center; padding:50px 0;'><h1>IDX</h1><p style='color:#888;'>CYBER TERMINAL</p></div>", unsafe_allow_html=True)
+        
+        # --- KODE DEBUG DIMULAI ---
+        st.divider()
+        if st.checkbox("🔍 DEBUG: LIHAT DATA DARI GOOGLE SHEETS"):
+            try:
+                test_df = conn_gs.read(worksheet="users")
+                st.write("Data yang terdeteksi di Sheets:")
+                st.dataframe(test_df)
+            except Exception as e:
+                st.error(f"Gagal baca Sheets: {e}")
+                st.info("Pastikan link di Secrets sudah benar dan Tab bernama 'users'")
+        st.divider()
+        # --- KODE DEBUG SELESAI ---
+
+        with st.form("login_form"):
+            u = st.text_input("OPERATOR ID").strip()
+            p = st.text_input("ACCESS KEY", type="password")
+            if st.form_submit_button("AUTHORIZE ACCESS", width="stretch"):
+                role = check_login_db(u, p)
+                if role:
+                    update_login_info(u)
+                    st.session_state["auth"] = {"logged_in": True, "user": u, "role": role}
+                    st.rerun()
+                else: 
+                    st.error("ACCESS DENIED: Username atau Password Salah")
+    st.stop()
+
+# --- 3. LANJUTKAN KE MENU UTAMA ---
+st.success(f"Welcome back, {st.session_state['auth']['user']}!")
+# ... (masukkan kode menu scanner/portfolio kamu di sini)
