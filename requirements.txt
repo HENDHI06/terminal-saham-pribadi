@@ -5,3 +5,5 @@ plotly
 openpyxl
 requests
 pytz
+st-gsheets-connection
+pandas
