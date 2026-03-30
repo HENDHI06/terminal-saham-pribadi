@@ -9,10 +9,14 @@ import warnings
 import os
 import requests 
 import pytz 
+import hashlib
 
 # --- 0. CONFIG & DATABASE SETUP ---
 warnings.filterwarnings("ignore", category=FutureWarning)
 st.set_page_config(page_title="IDX CYBER TERMINAL", page_icon="⚡", layout="wide")
+
+def hash_password(password):
+    return hashlib.sha256(str.encode(password)).hexdigest()
 
 def init_db():
     conn = sqlite3.connect('users.db')
@@ -28,7 +32,10 @@ def init_db():
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   username TEXT, ticker TEXT, buy_price REAL, 
                   sell_price REAL, lots INTEGER, pnl REAL, date TEXT)''')
-    c.execute("INSERT OR IGNORE INTO users (username, password, role) VALUES ('admin', 'admin123', 'admin')")
+    
+    # Admin default (hashed)
+    admin_pw = hash_password('admin123')
+    c.execute("INSERT OR IGNORE INTO users (username, password, role) VALUES ('admin', ?, 'admin')", (admin_pw,))
     conn.commit()
     conn.close()
 
@@ -63,10 +70,19 @@ def get_sidebar_log(u):
     return res if res else ("-", "-", "-")
 
 def check_login_db(u, p):
+    hashed = hash_password(p)
     conn = sqlite3.connect('users.db')
     c = conn.cursor()
-    c.execute("SELECT role FROM users WHERE username=? AND password=?", (u, p))
+    # Cek hashed password
+    c.execute("SELECT role FROM users WHERE username=? AND password=?", (u, hashed))
     res = c.fetchone()
+    # Fallback untuk user lama (plain text) - Migrasi Otomatis
+    if not res:
+        c.execute("SELECT role FROM users WHERE username=? AND password=?", (u, p))
+        res = c.fetchone()
+        if res:
+            c.execute("UPDATE users SET password=? WHERE username=?", (hashed, u))
+            conn.commit()
     conn.close()
     return res[0] if res else None
 
@@ -97,9 +113,10 @@ def get_user_portfolio(u, r):
 
 def add_user_db(u, p, r):
     try:
+        hashed = hash_password(p)
         conn = sqlite3.connect('users.db')
         c = conn.cursor()
-        c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", (u, p, r))
+        c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", (u, hashed, r))
         conn.commit(); conn.close(); return True
     except: return False
 
@@ -112,9 +129,10 @@ def delete_user_db(u):
 
 def update_password_db(u, new_p):
     try:
+        hashed = hash_password(new_p)
         conn = sqlite3.connect('users.db')
         c = conn.cursor()
-        c.execute("UPDATE users SET password=? WHERE username=?", (new_p, u))
+        c.execute("UPDATE users SET password=? WHERE username=?", (hashed, u))
         conn.commit(); conn.close(); return True
     except: return False
 
@@ -160,7 +178,6 @@ st.markdown("""
 
     button[kind="header"] { color: #ccff00 !important; }
 
-    /* Tabs Styling */
     .stTabs [data-baseweb="tab-list"] { gap: 10px; }
     .stTabs [data-baseweb="tab"] {
         background-color: rgba(204, 255, 0, 0.05) !important;
@@ -194,7 +211,7 @@ if not st.session_state["auth"]["logged_in"]:
                 else: st.error("ACCESS DENIED")
     st.stop()
 
-# --- 3. DATA ENGINE & MOBILE OPTIMIZATION ---
+# --- 3. DATA ENGINE & LOGIC ---
 @st.cache_data(ttl=86400)
 def load_tickers():
     try:
@@ -217,7 +234,7 @@ def draw_mobile_cards(df):
                     border-radius: 12px; padding: 15px; margin-bottom: 12px; border-left: 5px solid {chg_color};">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <b style="font-size: 1.2rem; color: #ccff00;">{row['TICKER']}</b>
-                <span style="color: {chg_color}; font-weight: bold;">{row['CHG%']}% {row['VOL_S']}</span>
+                <span style="color: {chg_color}; font-weight: bold;">{row['CHG%']}% {row['SIGNAL']}</span>
             </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; font-size: 0.85rem; color: #bbb;">
                 <div>Last: <b style="color:#fff;">{row['LAST']}</b></div>
@@ -237,26 +254,51 @@ def run_scan(tickers, mode):
         status_ui.caption(f"SCANNING: {i}/{len(tickers)}")
         p_bar.progress(min(i / len(tickers), 1.0))
         try:
-            data = yf.download(batch, period="10d", interval="1d", group_by='ticker', progress=False, auto_adjust=True)
+            # Mengambil 60 hari data untuk MA50 & RSI
+            data = yf.download(batch, period="60d", interval="1d", group_by='ticker', progress=False, auto_adjust=True)
             for t in batch:
                 try:
                     df_t = data[t].dropna() if len(batch) > 1 else data.dropna()
-                    if len(df_t) < 6: continue
+                    if len(df_t) < 51: continue # Butuh minimal 50 hari
+                    
                     df_t.columns = [c[0] if isinstance(c, tuple) else c for c in df_t.columns]
+                    
+                    # 1. Advanced Technicals (MA & RSI)
+                    last_close = df_t['Close']
+                    ma20 = last_close.rolling(20).mean().iloc[-1]
+                    ma50 = last_close.rolling(50).mean().iloc[-1]
+                    
+                    delta = last_close.diff()
+                    gain = (delta.where(delta > 0, 0)).rolling(14).mean()
+                    loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+                    rs = gain / loss
+                    rsi = (100 - (100 / (1 + rs))).iloc[-1]
+
                     last, prev = df_t.iloc[-1], df_t.iloc[-2]
-                    c_now, h_now = float(last['Close']), float(last['High'])
+                    c_now, h_now, o_now = float(last['Close']), float(last['High']), float(last['Open'])
                     vol, vol_avg5 = float(last['Volume']), df_t['Volume'].iloc[-6:-1].mean()
                     vol_spike = vol > (vol_avg5 * 1.5)
                     chg = ((c_now - float(prev['Close'])) / float(prev['Close'])) * 100
                     val = c_now * vol
+                    
+                    # 2. BSJP & HOLD Logic
+                    # BSJP: Beli Sore Jual Pagi (Strong Close)
+                    # HOLD: Uptrend kuat, diatas MA50
+                    sig = "-"
+                    if c_now >= (h_now * 0.99) and chg > 3: sig = "🚀 BSJP"
+                    elif c_now > ma50 and ma20 > ma50 and rsi < 70: sig = "💎 HOLD"
+
+                    # Filters
                     if mode == "Ketat":
-                        cond = (val > 1_000_000_000 and 2.5 < chg < 12 and c_now >= (h_now * 0.985) and vol_spike)
+                        cond = (val > 1_000_000_000 and 2.5 < chg < 15 and c_now > ma20 and vol_spike)
                     else:
                         cond = (val > 200_000_000 and chg > 1.5 and vol_spike)
+                    
                     if cond:
                         results.append({
                             "TICKER": t.replace(".JK",""), "LAST": int(c_now), "CHG%": round(chg, 2), 
-                            "VOL_S": "⚡ SPIKE" if vol_spike else "-", "ENTRY": f"{int(c_now)}-{int(c_now*1.01)}", 
+                            "SIGNAL": sig, "RSI": round(rsi, 1),
+                            "ENTRY": f"{int(c_now)}-{int(c_now*1.01)}", 
                             "TP": int(c_now*1.03), "CL": int(c_now*0.97), "VAL(M)": round(val/1_000_000, 1), "FULL": t
                         })
                 except: continue
@@ -331,15 +373,19 @@ if menu == "STRATEGY SCANNER":
             chart_data = yf.download(full_t, period="6mo", interval="1d", progress=False, auto_adjust=True)
             chart_data.columns = [c[0] if isinstance(c, tuple) else c for c in chart_data.columns]
             chart_data['MA20'] = chart_data['Close'].rolling(20).mean()
+            chart_data['MA50'] = chart_data['Close'].rolling(50).mean()
             delta = chart_data['Close'].diff(); gain = (delta.where(delta > 0, 0)).rolling(14).mean(); loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
             chart_data['RSI'] = 100 - (100 / (1 + (gain/loss)))
 
             fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_width=[0.2, 0.15, 0.65])
             fig.add_trace(go.Candlestick(x=chart_data.index, open=chart_data['Open'], high=chart_data['High'], low=chart_data['Low'], close=chart_data['Close'], name="Price"), row=1, col=1)
-            fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['MA20'], line=dict(color='#ffcc00'), name="MA20"), row=1, col=1)
+            fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['MA20'], line=dict(color='#ffcc00', width=1), name="MA20"), row=1, col=1)
+            fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['MA50'], line=dict(color='#00ffff', width=1.5), name="MA50"), row=1, col=1)
             fig.add_trace(go.Bar(x=chart_data.index, y=chart_data['Volume'], name="Vol", opacity=0.4), row=2, col=1)
             fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['RSI'], line=dict(color='#ff00ff'), name="RSI"), row=3, col=1)
-            fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=500, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            fig.add_hline(y=70, line_dash="dot", line_color="red", row=3, col=1)
+            fig.add_hline(y=30, line_dash="dot", line_color="green", row=3, col=1)
+            fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=600, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
             st.plotly_chart(fig, use_container_width=True)
 
 elif menu == "MONEY MANAGEMENT":
@@ -352,7 +398,6 @@ elif menu == "MONEY MANAGEMENT":
 
     tab1, tab2, tab3 = st.tabs(["📈 ACTIVE PORTFOLIO", "📜 TRADING HISTORY", "🛡️ RISK CALCULATOR"])
     
-    # --- TAB 1: ACTIVE PORTFOLIO ---
     with tab1:
         with st.expander("➕ ADD NEW POSITION", expanded=False):
             with st.form("form_add_portfolio", clear_on_submit=True):
@@ -387,12 +432,14 @@ elif menu == "MONEY MANAGEMENT":
             df_p[['Live', 'Cost', 'Value', 'P/L']] = df_p.apply(calc_active, axis=1)
             m1, m2, m3 = st.columns(3)
             t_inv = df_p['Cost'].sum(); t_pl = df_p['P/L'].sum()
+            
+            # Privacy Mode Fix pada Metrik
             m1.metric("INVESTMENT", format_privacy(t_inv))
-            m2.metric("FLOATING P/L", format_privacy(t_pl), f"{(t_pl/t_inv*100 if t_inv!=0 else 0):.2f}%")
+            m2.metric("FLOATING P/L", format_privacy(t_pl), f"{'***' if privacy_mode else (t_pl/t_inv*100 if t_inv!=0 else 0):.2f}%")
             m3.metric("TOTAL VALUE", format_privacy(t_inv + t_pl))
 
             fig_pie = go.Figure(data=[go.Pie(labels=df_p['ticker'], values=df_p['Value'], hole=.3)])
-            fig_pie.update_layout(template="plotly_dark", height=300, paper_bgcolor='rgba(0,0,0,0)', showlegend=True)
+            fig_pie.update_layout(template="plotly_dark", height=300, paper_bgcolor='rgba(0,0,0,0)', showlegend=not privacy_mode)
             st.plotly_chart(fig_pie, use_container_width=True)
 
             df_display = df_p.copy()
@@ -402,9 +449,9 @@ elif menu == "MONEY MANAGEMENT":
             st.dataframe(df_display.drop(columns=['username','tp_price','cl_price']), use_container_width=True, hide_index=True)
             
             for i, row in df_p.iterrows():
-                with st.expander(f"MANAGE {row['ticker']}"):
+                with st.expander(f"MANAGE {row['ticker']} {'(***)' if privacy_mode else ''}"):
                     cs, cd = st.columns([3, 1])
-                    s_price = cs.number_input(f"Harga Jual {row['ticker']}", value=float(row['Live']), key=f"sell_val_{row['id']}")
+                    s_price = cs.number_input(f"Harga Jual", value=float(row['Live']), key=f"sell_val_{row['id']}")
                     if cs.button(f"🚀 SELL {row['ticker']}", key=f"btn_sell_{row['id']}", use_container_width=True):
                         sell_position(user_now, row['id'], row['ticker'], row['buy_price'], s_price, row['lots'])
                         st.rerun()
@@ -414,7 +461,6 @@ elif menu == "MONEY MANAGEMENT":
                         st.rerun()
         else: st.info("Portfolio kosong.")
 
-    # --- TAB 2: TRADING HISTORY ---
     with tab2:
         st.subheader("📜 TRANSACTION_LOG")
         with sqlite3.connect('users.db') as conn:
@@ -436,34 +482,32 @@ elif menu == "MONEY MANAGEMENT":
             for idx, h_row in df_h.iterrows():
                 with st.expander(f"{h_row['date'].strftime('%Y-%m-%d')} | {h_row['ticker']} | {format_privacy(h_row['pnl'])}"):
                     col_txt, col_btn = st.columns([4,1])
-                    col_txt.write(f"Beli: {format_privacy(h_row['buy_price'])} | Jual: {format_privacy(h_row['sell_price'])} | Vol: {h_row['lots']} Lot")
+                    if privacy_mode:
+                        col_txt.write("Data hidden in Privacy Mode")
+                    else:
+                        col_txt.write(f"Beli: {h_row['buy_price']:,} | Jual: {h_row['sell_price']:,} | Vol: {h_row['lots']} Lot")
                     if col_btn.button("🗑️ Hapus", key=f"del_h_{h_row['id']}"):
                         with sqlite3.connect('users.db') as conn:
                             conn.execute("DELETE FROM history WHERE id=?", (h_row['id'],))
                         st.rerun()
         else: st.info("Belum ada riwayat transaksi.")
 
-    # --- NEW TAB 3: RISK CALCULATOR (ADDITION) ---
     with tab3:
         st.subheader("🛡️ POSITION_SIZER")
         with st.form("risk_calc"):
             c1, c2 = st.columns(2)
             capital = c1.number_input("Total Modal (IDR)", min_value=0, value=10000000, step=1000000)
             risk_pct = c2.slider("Resiko per Trade (%)", 0.5, 10.0, 1.0, 0.5)
-            
             c3, c4 = st.columns(2)
             entry_p = c3.number_input("Rencana Entry", min_value=0, value=1000)
             stop_l = c4.number_input("Stop Loss (Price)", min_value=0, value=950)
-            
             if st.form_submit_button("CALCULATE RISK"):
                 risk_amt = capital * (risk_pct / 100)
                 risk_per_share = entry_p - stop_l
-                
                 if risk_per_share > 0:
                     max_shares = risk_amt / risk_per_share
                     max_lots = int(max_shares / 100)
                     total_val = max_lots * 100 * entry_p
-                    
                     st.markdown(f"""
                     <div style="background:rgba(204,255,0,0.1); padding:20px; border-radius:10px; border:1px solid #ccff00;">
                         <h4 style='color:#ccff00; margin-top:0;'>HASIL ANALISA RESIKO</h4>
@@ -473,12 +517,12 @@ elif menu == "MONEY MANAGEMENT":
                         <p>Persentase Modal: <b>{(total_val/capital*100):.1f}%</b></p>
                     </div>
                     """, unsafe_allow_html=True)
-                else:
-                    st.error("Stop Loss harus lebih rendah dari harga Entry!")
+                else: st.error("Stop Loss harus lebih rendah dari harga Entry!")
 
 elif menu == "USER MANAGEMENT":
     st.title("👤 ACCESS_CONTROL")
     conn = sqlite3.connect('users.db')
+    # Sembunyikan password di tampilan admin
     df_u = pd.read_sql_query("SELECT username, role, last_login, location FROM users", conn)
     conn.close(); st.dataframe(df_u, use_container_width=True, hide_index=True)
     c1, c2 = st.columns(2)
@@ -497,4 +541,4 @@ elif menu == "SECURITY SETTINGS":
     with st.form("p"):
         new_p = st.text_input("NEW ACCESS KEY", type="password")
         if st.form_submit_button("UPDATE"):
-            if update_password_db(user_now, new_p): st.success("Updated")
+            if update_password_db(user_now, new_p): st.success("Security Key Updated with SHA-256")
