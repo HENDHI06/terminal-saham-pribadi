@@ -346,175 +346,37 @@ if menu == "STRATEGY SCANNER":
             fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=500, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
             st.plotly_chart(fig, use_container_width=True)
 
-# --- 5. CONTENT: MONEY MANAGEMENT (UPDATED) ---
+# --- 5. CONTENT: MONEY MANAGEMENT ---
 elif menu == "MONEY MANAGEMENT":
     st.title("💰 MONEY_INTELLIGENCE")
-    # --- PRIVACY MODE TOGGLE ---
-privacy_mode = st.checkbox("🕶️ PRIVACY MODE (Hide Balances)", value=False)
-
-def format_privacy(value, is_currency=True):
-    if privacy_mode:
-        return "Rp *****" if is_currency else "*****"
-    return f"Rp {value:,.0f}" if is_currency else f"{value:,.0f}"
     
+    # Tambahkan Privacy Mode di sini agar sejajar
+    privacy_mode = st.checkbox("🕶️ PRIVACY MODE (Hide Balances)", value=False)
+
+    def format_privacy(value, is_currency=True):
+        if privacy_mode:
+            return "Rp *****" if is_currency else "*****"
+        return f"Rp {value:,.0f}" if is_currency else f"{value:,.0f}"
+
     tab1, tab2 = st.tabs(["📈 ACTIVE PORTFOLIO", "📜 TRADING HISTORY"])
     
     with tab1:
-        with st.expander("➕ ADD NEW POSITION"):
-            with st.form("add_p"):
-                c1, c2, c3 = st.columns(3)
-                t_in = c1.text_input("Ticker (Tanpa .JK)")
-                p_in = c2.number_input("Buy Price", min_value=0.0)
-                l_in = c3.number_input("Lots", min_value=1)
-                if st.form_submit_button("AUTHORIZE PURCHASE"):
-                    if t_in: 
-                        add_to_portfolio(user_now, t_in, p_in, l_in, 0, 0)
-                        st.rerun()
+        # Isi kode tab 1 kamu (Add New Position, dll)
+        st.subheader("Active Positions")
+        # ... kode lainnya ...
 
-        df_p = get_user_portfolio(user_now, role)
-        if not df_p.empty:
-            # Fetch Live Prices
-            tickers_jk = [f"{t}.JK" for t in df_p['ticker'].unique()]
-            try:
-                live_data = yf.download(tickers_jk, period="1d", progress=False)['Close']
-                if isinstance(live_data, pd.Series):
-                    live_prices = {tickers_jk[0]: live_data.iloc[-1]}
-                else:
-                    live_prices = live_data.iloc[-1].to_dict()
-            except: live_prices = {}
-
-            def calc_active(row):
-                tk = f"{row['ticker']}.JK"
-                curr = live_prices.get(tk, row['buy_price'])
-                if isinstance(curr, (pd.Series, pd.DataFrame)): curr = curr.iloc[0]
-                cost = float(row['buy_price'] * row['lots'] * 100)
-                val = float(curr * row['lots'] * 100)
-                return pd.Series([float(curr), cost, val, (val-cost)])
-
-            df_p[['Live', 'Cost', 'Value', 'P/L']] = df_p.apply(calc_active, axis=1)
-            
-            # --- DASHBOARD METRICS ---
-            m1, m2, m3 = st.columns(3)
-            t_inv = df_p['Cost'].sum()
-            t_pl = df_p['P/L'].sum()
-            m1.metric("TOTAL INVESTMENT", f"Rp {t_inv:,.0f}")
-            m2.metric("FLOATING P/L", f"Rp {t_pl:,.0f}", f"{(t_pl/t_inv*100 if t_inv!=0 else 0):.2f}%")
-            m3.metric("CURRENT VALUE", f"Rp {t_inv+t_pl:,.0f}")
-
-            # --- PORTFOLIO VISUALIZATION ---
-            col_chart, col_list = st.columns([1, 1])
-            with col_chart:
-                fig_pie = go.Figure(data=[go.Pie(labels=df_p['ticker'], values=df_p['Value'], hole=.4, marker=dict(colors=['#ccff00', '#00ffff', '#ff00ff', '#ffffff']))])
-                fig_pie.update_layout(title="Asset Allocation", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', showlegend=False, height=300)
-                st.plotly_chart(fig_pie, use_container_width=True)
-            
-            with col_list:
-                for i, row in df_p.iterrows():
-                    clr = "#ccff00" if row['P/L'] >= 0 else "#ff4b4b"
-                    st.markdown(f"""
-                        <div style='border:1px solid {clr}33; padding:10px; border-radius:5px; margin-bottom:5px; background:rgba(0,0,0,0.2)'>
-                            <small>{row['ticker']}</small><br>
-                            <b style='color:{clr}'>P/L: Rp {row['P/L']:,.0f}</b>
-                        </div>
-                    """, unsafe_allow_html=True)
-
-            # --- MANAGEMENT TABLE ---
-            st.dataframe(df_p.drop(columns=['username','tp_price','cl_price']), use_container_width=True, hide_index=True)
-            
-            for i, row in df_p.iterrows():
-                with st.expander(f"EXECUTE SELL: {row['ticker']}"):
-                    cs, cd = st.columns([3, 1])
-                    s_price = cs.number_input(f"Sell Price", value=float(row['Live']), key=f"s_{row['id']}")
-                    if cs.button(f"CONFIRM SELL {row['ticker']}", key=f"btn_s_{row['id']}", use_container_width=True):
-                        sell_position(user_now, row['id'], row['ticker'], row['buy_price'], s_price, row['lots'])
-                        st.rerun()
-                    if cd.button("DEL", key=f"btn_d_{row['id']}", use_container_width=True):
-                        with sqlite3.connect('users.db') as conn:
-                            conn.execute("DELETE FROM portfolio WHERE id=?", (row['id'],))
-                        st.rerun()
-        else: st.info("No active positions detected.")
-
-   with tab2:
+    with tab2:  # <-- Pastikan baris ini sejajar lurus dengan 'with tab1'
         st.subheader("📜 TRANSACTION_LOG")
         
-        # Ambil data terbaru dari database
+        # Ambil data dari database
         with sqlite3.connect('users.db') as conn:
             df_h = pd.read_sql_query("SELECT * FROM history WHERE username=? ORDER BY date DESC", conn, params=(user_now,))
         
         if not df_h.empty:
-            df_h['date'] = pd.to_datetime(df_h['date'])
-            
-            # --- 1. FILTER RENTANG WAKTU ---
-            period = st.radio("TIME_SCOPE", ["1 Month", "1 Year", "All Time"], horizontal=True)
-            now = datetime.now()
-            if period == "1 Month": 
-                df_h = df_h[df_h['date'] > (now - pd.DateOffset(months=1))]
-            elif period == "1 Year": 
-                df_h = df_h[df_h['date'] > (now - pd.DateOffset(years=1))]
-
-            # --- 2. CALCULATE STATISTICS ---
-            total_profit = df_h[df_h['pnl'] > 0]['pnl'].sum()
-            total_loss = df_h[df_h['pnl'] <= 0]['pnl'].sum()
-            win_rate = (len(df_h[df_h['pnl'] > 0]) / len(df_h)) * 100 if len(df_h) > 0 else 0
-            
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("TOTAL PROFIT", format_privacy(total_profit))
-            c2.metric("TOTAL CUT LOSS", format_privacy(total_loss), delta_color="inverse")
-            c3.metric("NET GAIN", format_privacy(total_profit + total_loss))
-            c4.metric("WIN RATE", f"{win_rate:.1f}%")
-
-            # --- 3. EQUITY CURVE ---
-            df_h_sorted = df_h.sort_values('date')
-            df_h_sorted['Cumulative PnL'] = df_h_sorted['pnl'].cumsum()
-            
-            fig_curve = go.Figure()
-            fig_curve.add_trace(go.Scatter(
-                x=df_h_sorted['date'], 
-                y=df_h_sorted['Cumulative PnL'], 
-                mode='lines+markers',
-                line=dict(color='#ccff00', width=2),
-                fill='tozeroy',
-                fillcolor='rgba(204,255,0,0.1)',
-                name="Equity"
-            ))
-            fig_curve.update_layout(
-                template="plotly_dark", 
-                paper_bgcolor='rgba(0,0,0,0)', 
-                plot_bgcolor='rgba(0,0,0,0)',
-                height=300,
-                yaxis=dict(showticklabels=not privacy_mode) # Sembunyikan angka jika Privacy Mode ON
-            )
-            st.plotly_chart(fig_curve, use_container_width=True)
-
-            # --- 4. LIST TRANSAKSI DENGAN FITUR HAPUS ---
-            st.markdown("---")
-            for idx, h_row in df_h.iterrows():
-                # Warna label berdasarkan profit/loss
-                pnl_color = "#ccff00" if h_row['pnl'] >= 0 else "#ff4b4b"
-                pnl_text = format_privacy(h_row['pnl'])
-                
-                # Container Baris Riwayat
-                with st.expander(f"📅 {h_row['date'].strftime('%Y-%m-%d')} | {h_row['ticker']} | {pnl_text}"):
-                    col_info, col_action = st.columns([4, 1])
-                    
-                    with col_info:
-                        st.markdown(f"""
-                        **Detail Transaksi:**
-                        * Buy: `{format_privacy(h_row['buy_price'])}` | Sell: `{format_privacy(h_row['sell_price'])}`
-                        * Volume: `{h_row['lots']} Lots`
-                        * Net P/L: <span style="color:{pnl_color}; font-weight:bold;">{pnl_text}</span>
-                        """, unsafe_allow_html=True)
-                    
-                    with col_action:
-                        # Tombol Hapus Spesifik ID
-                        if st.button("🗑️ DELETE", key=f"del_hist_{h_row['id']}", use_container_width=True):
-                            with sqlite3.connect('users.db') as conn:
-                                conn.execute("DELETE FROM history WHERE id=?", (h_row['id'],))
-                            st.toast(f"Record {h_row['ticker']} Berhasil Dihapus!")
-                            st.rerun()
-
+            # ... Masukkan sisa kode Trading History di sini ...
+            st.write("Data ditemukan")
         else:
-            st.info("No trading history found in this period.")
+            st.info("No trading history found.")
 
 elif menu == "USER MANAGEMENT":
     st.title("👤 ACCESS_CONTROL")
