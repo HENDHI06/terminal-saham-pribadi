@@ -349,6 +349,13 @@ if menu == "STRATEGY SCANNER":
 # --- 5. CONTENT: MONEY MANAGEMENT (UPDATED) ---
 elif menu == "MONEY MANAGEMENT":
     st.title("💰 MONEY_INTELLIGENCE")
+    # --- PRIVACY MODE TOGGLE ---
+privacy_mode = st.checkbox("🕶️ PRIVACY MODE (Hide Balances)", value=False)
+
+def format_privacy(value, is_currency=True):
+    if privacy_mode:
+        return "Rp *****" if is_currency else "*****"
+    return f"Rp {value:,.0f}" if is_currency else f"{value:,.0f}"
     
     tab1, tab2 = st.tabs(["📈 ACTIVE PORTFOLIO", "📜 TRADING HISTORY"])
     
