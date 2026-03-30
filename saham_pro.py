@@ -9,14 +9,10 @@ import warnings
 import os
 import requests 
 import pytz 
-import hashlib
 
 # --- 0. CONFIG & DATABASE SETUP ---
 warnings.filterwarnings("ignore", category=FutureWarning)
 st.set_page_config(page_title="IDX CYBER TERMINAL", page_icon="⚡", layout="wide")
-
-def hash_password(password):
-    return hashlib.sha256(str.encode(password)).hexdigest()
 
 def init_db():
     conn = sqlite3.connect('users.db')
@@ -32,10 +28,7 @@ def init_db():
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   username TEXT, ticker TEXT, buy_price REAL, 
                   sell_price REAL, lots INTEGER, pnl REAL, date TEXT)''')
-    
-    # Admin default (hashed)
-    admin_pw = hash_password('admin123')
-    c.execute("INSERT OR IGNORE INTO users (username, password, role) VALUES ('admin', ?, 'admin')", (admin_pw,))
+    c.execute("INSERT OR IGNORE INTO users (username, password, role) VALUES ('admin', 'admin123', 'admin')")
     conn.commit()
     conn.close()
 
@@ -70,17 +63,10 @@ def get_sidebar_log(u):
     return res if res else ("-", "-", "-")
 
 def check_login_db(u, p):
-    hashed = hash_password(p)
     conn = sqlite3.connect('users.db')
     c = conn.cursor()
-    c.execute("SELECT role FROM users WHERE username=? AND password=?", (u, hashed))
+    c.execute("SELECT role FROM users WHERE username=? AND password=?", (u, p))
     res = c.fetchone()
-    if not res:
-        c.execute("SELECT role FROM users WHERE username=? AND password=?", (u, p))
-        res = c.fetchone()
-        if res:
-            c.execute("UPDATE users SET password=? WHERE username=?", (hashed, u))
-            conn.commit()
     conn.close()
     return res[0] if res else None
 
@@ -111,10 +97,9 @@ def get_user_portfolio(u, r):
 
 def add_user_db(u, p, r):
     try:
-        hashed = hash_password(p)
         conn = sqlite3.connect('users.db')
         c = conn.cursor()
-        c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", (u, hashed, r))
+        c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", (u, p, r))
         conn.commit(); conn.close(); return True
     except: return False
 
@@ -127,10 +112,9 @@ def delete_user_db(u):
 
 def update_password_db(u, new_p):
     try:
-        hashed = hash_password(new_p)
         conn = sqlite3.connect('users.db')
         c = conn.cursor()
-        c.execute("UPDATE users SET password=? WHERE username=?", (hashed, u))
+        c.execute("UPDATE users SET password=? WHERE username=?", (new_p, u))
         conn.commit(); conn.close(); return True
     except: return False
 
@@ -140,8 +124,13 @@ init_db()
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@400;900&display=swap');
-    [data-testid="stHeaderActionElements"], .stDeployButton, #MainMenu { display: none !important; }
+    
+    [data-testid="stHeaderActionElements"], .stDeployButton, #MainMenu {
+        display: none !important;
+    }
+    
     header { background-color: transparent !important; }
+
     .stApp {
         background-color: #05070a;
         background-image: 
@@ -151,14 +140,37 @@ st.markdown("""
             linear-gradient(90deg, rgba(204, 255, 0, 0.05) 1px, transparent 1px),
             radial-gradient(circle at center, rgba(10, 25, 47, 0.4), #05070a);
         background-size: 20px 20px, 20px 20px, 100px 100px, 100px 100px, 100% 100%;
-        font-family: 'JetBrains Mono', monospace; color: #e0e0e0;
+        font-family: 'JetBrains Mono', monospace;
+        color: #e0e0e0;
     }
+
     div[data-testid="stMetric"], .status-box, .stDataFrame, div[data-testid="stExpander"], .stTabs, .stForm {
-        background: rgba(0, 10, 20, 0.5) !important; backdrop-filter: blur(12px);
-        border: 1px solid rgba(204, 255, 0, 0.15) !important; border-radius: 10px !important;
+        background: rgba(0, 10, 20, 0.5) !important;
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(204, 255, 0, 0.15) !important;
+        border-radius: 10px !important;
     }
-    h1 { font-family: 'Orbitron', sans-serif; background: linear-gradient(90deg, #ccff00, #00ffff);
-        -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+
+    h1 {
+        font-family: 'Orbitron', sans-serif;
+        background: linear-gradient(90deg, #ccff00, #00ffff);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    button[kind="header"] { color: #ccff00 !important; }
+
+    /* Tabs Styling */
+    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
+    .stTabs [data-baseweb="tab"] {
+        background-color: rgba(204, 255, 0, 0.05) !important;
+        border-radius: 5px 5px 0px 0px;
+        color: #888 !important;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: rgba(204, 255, 0, 0.15) !important;
+        color: #ccff00 !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -182,13 +194,19 @@ if not st.session_state["auth"]["logged_in"]:
                 else: st.error("ACCESS DENIED")
     st.stop()
 
-# --- 3. DATA ENGINE & LOGIC ---
+# --- 3. DATA ENGINE & MOBILE OPTIMIZATION ---
 @st.cache_data(ttl=86400)
 def load_tickers():
     try:
         url = "https://raw.githubusercontent.com/datasets-id/idx-stocks/main/data/stock_codes.csv"
         df_idx = pd.read_csv(url)
-        return [str(t).strip().upper() + ".JK" for t in df_idx['ticker'].tolist() if len(str(t)) <= 5]
+        tickers = [str(t).strip().upper() + ".JK" for t in df_idx['ticker'].tolist() if len(str(t)) <= 5]
+        if len(tickers) > 100: return tickers
+    except: pass
+    try:
+        df = pd.read_excel("daftar_saham.xlsx")
+        col = 'Kode' if 'Kode' in df.columns else df.columns[0]
+        return [f"{str(t).strip().upper()}.JK" for t in df[col].tolist() if len(str(t)) <= 5]
     except: return []
 
 def draw_mobile_cards(df):
@@ -198,14 +216,15 @@ def draw_mobile_cards(df):
         <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(204, 255, 0, 0.2); 
                     border-radius: 12px; padding: 15px; margin-bottom: 12px; border-left: 5px solid {chg_color};">
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <b style="font-size: 1.1rem; color: #ccff00;">{row['TICKER']}</b>
-                <span style="color: {chg_color}; font-weight: bold;">{row['CHG%']}% | {row['SIGNAL']}</span>
+                <b style="font-size: 1.2rem; color: #ccff00;">{row['TICKER']}</b>
+                <span style="color: {chg_color}; font-weight: bold;">{row['CHG%']}% {row['VOL_S']}</span>
             </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; font-size: 0.85rem; color: #bbb;">
                 <div>Last: <b style="color:#fff;">{row['LAST']}</b></div>
-                <div>Val: <b style="color:#fff;">{row['VAL(M)']}M</b></div>
-                <div style="color: #00ffff;">In: {row['ENTRY']}</div>
+                <div>Value: <b style="color:#fff;">{row['VAL(M)']}M</b></div>
+                <div style="color: #00ffff;">Entry: {row['ENTRY']}</div>
                 <div style="color: #00ff00;">TP: {row['TP']}</div>
+                <div style="color: #ff4b4b;">CL: {row['CL']}</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -218,98 +237,264 @@ def run_scan(tickers, mode):
         status_ui.caption(f"SCANNING: {i}/{len(tickers)}")
         p_bar.progress(min(i / len(tickers), 1.0))
         try:
-            data = yf.download(batch, period="60d", interval="1d", group_by='ticker', progress=False, auto_adjust=True)
+            data = yf.download(batch, period="10d", interval="1d", group_by='ticker', progress=False, auto_adjust=True)
             for t in batch:
                 try:
                     df_t = data[t].dropna() if len(batch) > 1 else data.dropna()
-                    if len(df_t) < 51: continue
+                    if len(df_t) < 6: continue
                     df_t.columns = [c[0] if isinstance(c, tuple) else c for c in df_t.columns]
-                    
-                    # Technicals
-                    c_now, h_now, o_now = float(df_t['Close'].iloc[-1]), float(df_t['High'].iloc[-1]), float(df_t['Open'].iloc[-1])
-                    prev_c = float(df_t['Close'].iloc[-2])
-                    vol, vol_avg5 = float(df_t['Volume'].iloc[-1]), df_t['Volume'].iloc[-6:-1].mean()
-                    ma20, ma50 = df_t['Close'].rolling(20).mean().iloc[-1], df_t['Close'].rolling(50).mean().iloc[-1]
-                    
-                    # RSI Calculation
-                    delta = df_t['Close'].diff(); g = delta.where(delta > 0, 0).rolling(14).mean(); l = -delta.where(delta < 0, 0).rolling(14).mean()
-                    rsi = (100 - (100 / (1 + (g/l)))).iloc[-1]
-                    chg, val = ((c_now - prev_c) / prev_c) * 100, c_now * vol
-
-                    # --- CORE LOGIC (SUPER BSJP, BSJP, HOLD) ---
-                    sig = "-"
-                    is_strong_close = c_now >= (h_now * 0.99)
-                    
-                    if is_strong_close and chg > 5 and vol > (vol_avg5 * 2):
-                        sig = "⚡ SUPER BSJP"
-                    elif is_strong_close and chg > 3:
-                        sig = "🚀 BSJP"
-                    elif c_now > ma50 and ma20 > ma50 and rsi < 70:
-                        sig = "💎 HOLD"
-
-                    # Final Filter
-                    min_val = 1_000_000_000 if mode == "Ketat" else 200_000_000
-                    min_chg = 2.5 if mode == "Ketat" else 1.5
-                    
-                    if val > min_val and chg > min_chg and vol > vol_avg5:
+                    last, prev = df_t.iloc[-1], df_t.iloc[-2]
+                    c_now, h_now = float(last['Close']), float(last['High'])
+                    vol, vol_avg5 = float(last['Volume']), df_t['Volume'].iloc[-6:-1].mean()
+                    vol_spike = vol > (vol_avg5 * 1.5)
+                    chg = ((c_now - float(prev['Close'])) / float(prev['Close'])) * 100
+                    val = c_now * vol
+                    if mode == "Ketat":
+                        cond = (val > 1_000_000_000 and 2.5 < chg < 12 and c_now >= (h_now * 0.985) and vol_spike)
+                    else:
+                        cond = (val > 200_000_000 and chg > 1.5 and vol_spike)
+                    if cond:
                         results.append({
                             "TICKER": t.replace(".JK",""), "LAST": int(c_now), "CHG%": round(chg, 2), 
-                            "SIGNAL": sig, "RSI": round(rsi, 1),
-                            "ENTRY": f"{int(c_now)}-{int(c_now*1.01)}", "TP": int(c_now*1.03), 
-                            "CL": int(c_now*0.97), "VAL(M)": round(val/1_000_000, 1), "FULL": t
+                            "VOL_S": "⚡ SPIKE" if vol_spike else "-", "ENTRY": f"{int(c_now)}-{int(c_now*1.01)}", 
+                            "TP": int(c_now*1.03), "CL": int(c_now*0.97), "VAL(M)": round(val/1_000_000, 1), "FULL": t
                         })
                 except: continue
         except: continue
     status_ui.empty(); p_bar.empty()
     return pd.DataFrame(results)
 
-# --- 4. NAVIGATION & SIDEBAR ---
-user_now, role = st.session_state["auth"]["user"], st.session_state["auth"]["role"]
+# --- 4. NAVIGATION ---
+role = st.session_state["auth"]["role"]
+user_now = st.session_state["auth"]["user"]
 last_l, ip_l, loc_l = get_sidebar_log(user_now)
 
-st.sidebar.markdown(f"<div style='padding:15px; border:1px solid #ccff0033; border-radius:10px; background:rgba(204,255,0,0.05);'><b>{user_now.upper()}</b><br><small>{role.upper()} | {ip_l}</small></div>", unsafe_allow_html=True)
-menu = st.sidebar.radio("COMMAND", ["STRATEGY SCANNER", "MONEY MANAGEMENT", "USER MANAGEMENT", "SECURITY SETTINGS"] if role == "admin" else ["STRATEGY SCANNER", "MONEY MANAGEMENT", "SECURITY SETTINGS"])
+st.sidebar.markdown(f"""
+    <div style='padding:15px; border:1px solid #ccff0033; border-radius:10px; background:rgba(204,255,0,0.05); margin-bottom:10px;'>
+        <h3 style='margin:0; color:#ccff00;'>{user_now.upper()}</h3>
+        <p style='margin:0; font-size:10px; color:#888;'>NODE ACTIVE | {role.upper()}</p>
+        <hr style='border:0.1px solid #ccff0022; margin:10px 0;'>
+        <p style='font-size:10px; color:#888;'>LST: {last_l}</p>
+        <p style='font-size:10px; color:#888;'>IP : {ip_l}</p>
+        <p style='font-size:10px; color:#888;'>LOC: {loc_l}</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-if st.sidebar.button("🔴 LOGOUT"): st.session_state["auth"] = {"logged_in": False}; st.rerun()
+menu_list = ["STRATEGY SCANNER", "MONEY MANAGEMENT", "SECURITY SETTINGS"]
+if role == "admin": menu_list.insert(1, "USER MANAGEMENT")
+menu = st.sidebar.radio("COMMAND CENTER", menu_list)
 
-# --- 5. APP PAGES ---
+if st.sidebar.button("🔴 TERMINATE SESSION", width="stretch"):
+    st.session_state["auth"] = {"logged_in": False}; st.rerun()
+
+# --- 5. CONTENT ---
 if menu == "STRATEGY SCANNER":
     st.title("🛰️ MARKET_INTELLIGENCE")
-    mode_scan = st.radio("ALGO_SENSITIVITY", ["Ketat", "Agresif"], horizontal=True)
-    
-    if st.button("⚡ EXECUTE_SCAN", width="stretch"):
+    try:
+        ihsg_hist = yf.Ticker("^JKSE").history(period="2d")
+        if len(ihsg_hist) >= 2:
+            prev_c, curr_c = ihsg_hist['Close'].iloc[-2], ihsg_hist['Close'].iloc[-1]
+            diff = curr_c - prev_c
+            clr = "#ccff00" if diff >= 0 else "#ff4b4b"
+            st.markdown(f"<div class='status-box' style='border-left-color:{clr} !important;'>IHSG: <span style='color:{clr}; font-weight:bold;'>{curr_c:,.2f} ({diff:+.2f})</span></div>", unsafe_allow_html=True)
+    except: pass
+
+    c_algo, c_sync = st.columns([4, 1])
+    with c_algo: mode_scan = st.radio("ALGO_SENSITIVITY", ["Ketat", "Agresif"], horizontal=True)
+    with c_sync:
+        if st.button("🔄 REFRESH PRICE", use_container_width=True):
+            if 'results' in st.session_state and not st.session_state.results.empty:
+                current_tickers = [f"{t}.JK" for t in st.session_state.results['TICKER']]
+                try:
+                    new_data = yf.download(current_tickers, period="1d", progress=False)['Close']
+                    for idx, row in st.session_state.results.iterrows():
+                        tk = f"{row['TICKER']}.JK"
+                        st.session_state.results.at[idx, 'LAST'] = int(new_data[tk].iloc[-1]) if len(current_tickers) > 1 else int(new_data.iloc[-1])
+                    st.session_state.scan_time = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%H:%M:%S")
+                except: pass
+            st.rerun()
+
+    if st.button("⚡ EXECUTE_DEEP_SCAN", width="stretch"):
         st.session_state.results = run_scan(load_tickers(), mode_scan)
         st.session_state.scan_time = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%H:%M:%S")
 
-    if 'results' in st.session_state and not st.session_state.results.empty:
-        st.caption(f"Last Sync: {st.session_state.scan_time}")
-        t1, t2 = st.tabs(["🖥️ DESKTOP", "📱 MOBILE"])
-        with t1: st.dataframe(st.session_state.results.drop(columns=['FULL']), use_container_width=True, hide_index=True)
-        with t2: draw_mobile_cards(st.session_state.results)
+    if 'results' in st.session_state:
+        df = st.session_state.results
+        if not df.empty:
+            st.caption(f"Last Sync: {st.session_state.scan_time} WIB")
+            tab_desk, tab_mob = st.tabs(["🖥️ DESKTOP VIEW", "📱 MOBILE VIEW"])
+            with tab_desk: st.dataframe(df.drop(columns=['FULL']), use_container_width=True, hide_index=True)
+            with tab_mob: draw_mobile_cards(df)
+            
+            sel_t = st.selectbox("FOCUS_TARGET", df['TICKER'].tolist())
+            full_t = df[df['TICKER'] == sel_t]['FULL'].values[0]
+            chart_data = yf.download(full_t, period="6mo", interval="1d", progress=False, auto_adjust=True)
+            chart_data.columns = [c[0] if isinstance(c, tuple) else c for c in chart_data.columns]
+            chart_data['MA20'] = chart_data['Close'].rolling(20).mean()
+            delta = chart_data['Close'].diff(); gain = (delta.where(delta > 0, 0)).rolling(14).mean(); loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+            chart_data['RSI'] = 100 - (100 / (1 + (gain/loss)))
+
+            fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_width=[0.2, 0.15, 0.65])
+            fig.add_trace(go.Candlestick(x=chart_data.index, open=chart_data['Open'], high=chart_data['High'], low=chart_data['Low'], close=chart_data['Close'], name="Price"), row=1, col=1)
+            fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['MA20'], line=dict(color='#ffcc00'), name="MA20"), row=1, col=1)
+            fig.add_trace(go.Bar(x=chart_data.index, y=chart_data['Volume'], name="Vol", opacity=0.4), row=2, col=1)
+            fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['RSI'], line=dict(color='#ff00ff'), name="RSI"), row=3, col=1)
+            fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=500, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig, use_container_width=True)
 
 elif menu == "MONEY MANAGEMENT":
     st.title("💰 MONEY_INTELLIGENCE")
-    privacy = st.checkbox("🕶️ PRIVACY MODE", value=False)
-    
-    def fmt(v, curr=True):
-        if privacy: return "Rp ***" if curr else "***"
-        return f"Rp {v:,.0f}" if curr else f"{v:,.0f}"
+    privacy_mode = st.checkbox("🕶️ PRIVACY MODE (Hide Balances)", value=False)
 
-    # Portfolio Logic (Simplified)
-    df_p = get_user_portfolio(user_now, role)
-    if not df_p.empty:
-        # Tampilan metrik dan tabel portfolio dengan filter privacy
-        m1, m2 = st.columns(2)
-        m1.metric("PORTFOLIO VALUE", fmt(10000000)) # Contoh statis
-        st.dataframe(df_p if not privacy else "Data Hidden", use_container_width=True)
+    def format_privacy(value, is_currency=True):
+        if privacy_mode: return "Rp *****" if is_currency else "*****"
+        return f"Rp {value:,.0f}" if is_currency else f"{value:,.0f}"
+
+    tab1, tab2, tab3 = st.tabs(["📈 ACTIVE PORTFOLIO", "📜 TRADING HISTORY", "🛡️ RISK CALCULATOR"])
+    
+    # --- TAB 1: ACTIVE PORTFOLIO ---
+    with tab1:
+        with st.expander("➕ ADD NEW POSITION", expanded=False):
+            with st.form("form_add_portfolio", clear_on_submit=True):
+                c1, c2, c3 = st.columns(3)
+                t_in = c1.text_input("Ticker (Contoh: BBCA)")
+                p_in = c2.number_input("Buy Price", min_value=0, step=1)
+                l_in = c3.number_input("Lots", min_value=1, step=1)
+                submit_add = st.form_submit_button("SAVE TO PORTFOLIO")
+                if submit_add:
+                    if t_in and p_in > 0:
+                        add_to_portfolio(user_now, t_in, p_in, l_in, 0, 0)
+                        st.success(f"Berhasil menambahkan {t_in.upper()}"); st.rerun()
+                    else: st.error("Isi Ticker dan Harga Beli dengan benar!")
+
+        df_p = get_user_portfolio(user_now, role)
+        if not df_p.empty:
+            tickers_jk = [f"{t}.JK" for t in df_p['ticker'].unique()]
+            try:
+                live_data = yf.download(tickers_jk, period="1d", progress=False)['Close']
+                if len(tickers_jk) > 1: live_prices = live_data.iloc[-1].to_dict()
+                else: live_prices = {tickers_jk[0]: live_data.iloc[-1]}
+            except: live_prices = {}
+
+            def calc_active(row):
+                tk = f"{row['ticker']}.JK"
+                curr = live_prices.get(tk, row['buy_price'])
+                if isinstance(curr, (pd.Series, pd.DataFrame)): curr = curr.iloc[0]
+                cost = float(row['buy_price'] * row['lots'] * 100)
+                val = float(curr * row['lots'] * 100)
+                return pd.Series([float(curr), cost, val, (val-cost)])
+
+            df_p[['Live', 'Cost', 'Value', 'P/L']] = df_p.apply(calc_active, axis=1)
+            m1, m2, m3 = st.columns(3)
+            t_inv = df_p['Cost'].sum(); t_pl = df_p['P/L'].sum()
+            m1.metric("INVESTMENT", format_privacy(t_inv))
+            m2.metric("FLOATING P/L", format_privacy(t_pl), f"{(t_pl/t_inv*100 if t_inv!=0 else 0):.2f}%")
+            m3.metric("TOTAL VALUE", format_privacy(t_inv + t_pl))
+
+            fig_pie = go.Figure(data=[go.Pie(labels=df_p['ticker'], values=df_p['Value'], hole=.3)])
+            fig_pie.update_layout(template="plotly_dark", height=300, paper_bgcolor='rgba(0,0,0,0)', showlegend=True)
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+            df_display = df_p.copy()
+            if privacy_mode:
+                for col in ['buy_price', 'Live', 'Cost', 'Value', 'P/L']: df_display[col] = "*****"
+            
+            st.dataframe(df_display.drop(columns=['username','tp_price','cl_price']), use_container_width=True, hide_index=True)
+            
+            for i, row in df_p.iterrows():
+                with st.expander(f"MANAGE {row['ticker']}"):
+                    cs, cd = st.columns([3, 1])
+                    s_price = cs.number_input(f"Harga Jual {row['ticker']}", value=float(row['Live']), key=f"sell_val_{row['id']}")
+                    if cs.button(f"🚀 SELL {row['ticker']}", key=f"btn_sell_{row['id']}", use_container_width=True):
+                        sell_position(user_now, row['id'], row['ticker'], row['buy_price'], s_price, row['lots'])
+                        st.rerun()
+                    if cd.button("🗑️", key=f"btn_del_port_{row['id']}", use_container_width=True):
+                        with sqlite3.connect('users.db') as conn:
+                            conn.execute("DELETE FROM portfolio WHERE id=?", (row['id'],))
+                        st.rerun()
+        else: st.info("Portfolio kosong.")
+
+    # --- TAB 2: TRADING HISTORY ---
+    with tab2:
+        st.subheader("📜 TRANSACTION_LOG")
+        with sqlite3.connect('users.db') as conn:
+            df_h = pd.read_sql_query("SELECT * FROM history WHERE username=? ORDER BY date DESC", conn, params=(user_now,))
+        if not df_h.empty:
+            df_h['date'] = pd.to_datetime(df_h['date'])
+            total_profit = df_h[df_h['pnl'] > 0]['pnl'].sum()
+            total_loss = df_h[df_h['pnl'] <= 0]['pnl'].sum()
+            c1, c2, c3 = st.columns(3)
+            c1.metric("PROFIT", format_privacy(total_profit))
+            c2.metric("LOSS", format_privacy(total_loss), delta_color="inverse")
+            c3.metric("NET", format_privacy(total_profit + total_loss))
+
+            df_curve = df_h.sort_values('date'); df_curve['cum_pnl'] = df_curve['pnl'].cumsum()
+            fig_curve = go.Figure(go.Scatter(x=df_curve['date'], y=df_curve['cum_pnl'], mode='lines+markers', line=dict(color='#ccff00')))
+            fig_curve.update_layout(template="plotly_dark", height=250, paper_bgcolor='rgba(0,0,0,0)', yaxis=dict(showticklabels=not privacy_mode))
+            st.plotly_chart(fig_curve, use_container_width=True)
+
+            for idx, h_row in df_h.iterrows():
+                with st.expander(f"{h_row['date'].strftime('%Y-%m-%d')} | {h_row['ticker']} | {format_privacy(h_row['pnl'])}"):
+                    col_txt, col_btn = st.columns([4,1])
+                    col_txt.write(f"Beli: {format_privacy(h_row['buy_price'])} | Jual: {format_privacy(h_row['sell_price'])} | Vol: {h_row['lots']} Lot")
+                    if col_btn.button("🗑️ Hapus", key=f"del_h_{h_row['id']}"):
+                        with sqlite3.connect('users.db') as conn:
+                            conn.execute("DELETE FROM history WHERE id=?", (h_row['id'],))
+                        st.rerun()
+        else: st.info("Belum ada riwayat transaksi.")
+
+    # --- NEW TAB 3: RISK CALCULATOR (ADDITION) ---
+    with tab3:
+        st.subheader("🛡️ POSITION_SIZER")
+        with st.form("risk_calc"):
+            c1, c2 = st.columns(2)
+            capital = c1.number_input("Total Modal (IDR)", min_value=0, value=10000000, step=1000000)
+            risk_pct = c2.slider("Resiko per Trade (%)", 0.5, 10.0, 1.0, 0.5)
+            
+            c3, c4 = st.columns(2)
+            entry_p = c3.number_input("Rencana Entry", min_value=0, value=1000)
+            stop_l = c4.number_input("Stop Loss (Price)", min_value=0, value=950)
+            
+            if st.form_submit_button("CALCULATE RISK"):
+                risk_amt = capital * (risk_pct / 100)
+                risk_per_share = entry_p - stop_l
+                
+                if risk_per_share > 0:
+                    max_shares = risk_amt / risk_per_share
+                    max_lots = int(max_shares / 100)
+                    total_val = max_lots * 100 * entry_p
+                    
+                    st.markdown(f"""
+                    <div style="background:rgba(204,255,0,0.1); padding:20px; border-radius:10px; border:1px solid #ccff00;">
+                        <h4 style='color:#ccff00; margin-top:0;'>HASIL ANALISA RESIKO</h4>
+                        <p>Uang Beresiko (Risk): <b>{format_privacy(risk_amt)}</b></p>
+                        <p>Jumlah Maksimal: <b style='font-size:1.5rem;'>{max_lots} LOT</b></p>
+                        <p>Total Nilai Beli: <b>{format_privacy(total_val)}</b></p>
+                        <p>Persentase Modal: <b>{(total_val/capital*100):.1f}%</b></p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.error("Stop Loss harus lebih rendah dari harga Entry!")
+
+elif menu == "USER MANAGEMENT":
+    st.title("👤 ACCESS_CONTROL")
+    conn = sqlite3.connect('users.db')
+    df_u = pd.read_sql_query("SELECT username, role, last_login, location FROM users", conn)
+    conn.close(); st.dataframe(df_u, use_container_width=True, hide_index=True)
+    c1, c2 = st.columns(2)
+    with c1:
+        with st.form("add_u"):
+            nu, np, nr = st.text_input("User"), st.text_input("Key", type="password"), st.selectbox("Role", ["user", "admin"])
+            if st.form_submit_button("GRANT"):
+                if add_user_db(nu, np, nr): st.success("Added"); st.rerun()
+    with c2:
+        du = st.text_input("Revoke ID")
+        if st.button("🔴 DELETE PERMANENTLY"):
+            if delete_user_db(du): st.warning("Removed"); st.rerun()
 
 elif menu == "SECURITY SETTINGS":
     st.title("🔒 SECURITY_VAULT")
-    with st.form("p_update"):
+    with st.form("p"):
         new_p = st.text_input("NEW ACCESS KEY", type="password")
-        if st.form_submit_button("UPDATE KEY"):
-            if update_password_db(user_now, new_p): st.success("Encrypted & Updated")
-
-elif menu == "USER MANAGEMENT" and role == "admin":
-    st.title("👤 ACCESS_CONTROL")
-    # Admin tools here...
+        if st.form_submit_button("UPDATE"):
+            if update_password_db(user_now, new_p): st.success("Updated")
