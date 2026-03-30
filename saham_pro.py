@@ -392,6 +392,7 @@ elif menu == "MONEY MANAGEMENT":
         
         df_p = get_user_portfolio(user_now, role)
         if not df_p.empty:
+            # 1. AMBIL DATA HARGA LIVE
             tickers = [f"{t}.JK" for t in df_p['ticker'].unique()]
             try:
                 live_data = yf.download(tickers, period="1d", progress=False)['Close']
@@ -399,6 +400,7 @@ elif menu == "MONEY MANAGEMENT":
             except: 
                 live_prices = {}
             
+            # 2. HITUNG VALUE & P/L
             def calc_active(row):
                 tk = f"{row['ticker']}.JK"
                 curr = live_prices.get(tk, row['buy_price'])
@@ -408,12 +410,32 @@ elif menu == "MONEY MANAGEMENT":
                 return pd.Series([float(curr), cost, val, (val-cost)])
             
             df_p[['Live', 'Cost', 'Value', 'P/L']] = df_p.apply(calc_active, axis=1)
+
+            # 3. TAMPILKAN METRIK ATAS
             m1, m2, m3 = st.columns(3)
             t_inv, t_pl = df_p['Cost'].sum(), df_p['P/L'].sum()
-            m1.metric("INVESTMENT", f"Rp {t_inv:,.0f}")
+            m1.metric("TOTAL INVESTMENT", f"Rp {t_inv:,.0f}")
             m2.metric("FLOATING P/L", f"Rp {t_pl:,.0f}", f"{(t_pl/t_inv*100 if t_inv!=0 else 0):.2f}%")
-            m3.metric("BALANCE", f"Rp {t_inv+t_pl:,.0f}")
-            
+            m3.metric("CURRENT VALUE", f"Rp {t_inv+t_pl:,.0f}")
+
+            # 4. --- BAGIAN GRAFIK BARU ---
+            st.markdown("### 📊 PORTFOLIO VISUALIZER")
+            g1, g2 = st.columns(2)
+            with g1:
+                fig_pie = go.Figure(data=[go.Pie(labels=df_p['ticker'], values=df_p['Value'], hole=.4)])
+                fig_pie.update_layout(title="Allocation", template="plotly_dark", height=300, paper_bgcolor='rgba(0,0,0,0)', margin=dict(l=0,r=0,t=30,b=0))
+                st.plotly_chart(fig_pie, use_container_width=True)
+            with g2:
+                fig_bar = go.Figure(data=[
+                    go.Bar(name='Cost', x=df_p['ticker'], y=df_p['Cost'], marker_color='grey'),
+                    go.Bar(name='Value', x=df_p['ticker'], y=df_p['Value'], marker_color='#ccff00')
+                ])
+                fig_bar.update_layout(title="Cost vs Value", barmode='group', template="plotly_dark", height=300, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=0,r=0,t=30,b=0))
+                st.plotly_chart(fig_bar, use_container_width=True)
+            # ---------------------------
+
+            # 5. TOMBOL MANAGE & TABEL
+            st.markdown("### 🛠️ MANAGE POSITIONS")
             for i, row in df_p.iterrows():
                 with st.expander(f"MANAGE: {row['ticker']} ({row['lots']} Lots)"):
                     cs, cd = st.columns([3, 1])
@@ -426,9 +448,10 @@ elif menu == "MONEY MANAGEMENT":
                         conn.cursor().execute("DELETE FROM portfolio WHERE id=?", (row['id'],))
                         conn.commit(); conn.close()
                         st.rerun()
+            
             st.dataframe(df_p.drop(columns=['username','tp_price','cl_price']), use_container_width=True, hide_index=True)
         else:
-            st.info("Belum ada posisi.")
+            st.info("Belum ada posisi aktif.")
 
     with tab2:
         st.subheader("📊 PERFORMANCE DASHBOARD")
