@@ -4,4 +4,4 @@ pandas
 plotly
 requests
 pytz
-st-gsheets-connection
+openpyxl
