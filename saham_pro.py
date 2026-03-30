@@ -120,7 +120,7 @@ def update_password_db(u, new_p):
 
 init_db()
 
-# --- 1. PRO CYBER STYLING (FIXED SIDEBAR BUTTON) ---
+# --- 1. PRO CYBER STYLING (ENHANCED CYBER ART) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@400;900&display=swap');
@@ -131,48 +131,76 @@ st.markdown("""
     
     header { background-color: transparent !important; }
 
+    /* BACKGROUND ART: CYBER GRID & ANIMATED LINES */
     .stApp {
         background-color: #05070a;
         background-image: 
-            linear-gradient(rgba(204, 255, 0, 0.02) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(204, 255, 0, 0.02) 1px, transparent 1px),
+            /* Grid Utama */
             linear-gradient(rgba(204, 255, 0, 0.05) 1px, transparent 1px),
             linear-gradient(90deg, rgba(204, 255, 0, 0.05) 1px, transparent 1px),
-            radial-gradient(circle at center, rgba(10, 25, 47, 0.4), #05070a);
-        background-size: 20px 20px, 20px 20px, 100px 100px, 100px 100px, 100% 100%;
+            /* Garis Aksen Diagonal */
+            linear-gradient(45deg, rgba(0, 255, 255, 0.02) 25%, transparent 25%, transparent 50%, rgba(0, 255, 255, 0.02) 50%, rgba(0, 255, 255, 0.02) 75%, transparent 75%, transparent),
+            /* Radial Glow di Tengah */
+            radial-gradient(circle at 50% 50%, rgba(10, 25, 47, 0.8), #05070a);
+        background-size: 40px 40px, 40px 40px, 100px 100px, 100% 100%;
         font-family: 'JetBrains Mono', monospace;
         color: #e0e0e0;
     }
 
-    div[data-testid="stMetric"], .status-box, .stDataFrame, div[data-testid="stExpander"], .stTabs, .stForm {
-        background: rgba(0, 10, 20, 0.5) !important;
-        backdrop-filter: blur(12px);
-        border: 1px solid rgba(204, 255, 0, 0.15) !important;
-        border-radius: 10px !important;
+    /* EFEK SCANLINE BERGERAK */
+    .stApp::before {
+        content: " ";
+        display: block;
+        position: absolute;
+        top: 0; left: 0; bottom: 0; right: 0;
+        background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), 
+                    linear-gradient(90deg, rgba(255, 0, 0, 0.02), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.02));
+        z-index: 2;
+        background-size: 100% 4px, 3px 100%;
+        pointer-events: none;
     }
 
+    /* BOX STYLING DENGAN NEON BORDER */
+    div[data-testid="stMetric"], .status-box, .stDataFrame, div[data-testid="stExpander"], .stTabs, .stForm {
+        background: rgba(0, 10, 20, 0.7) !important;
+        backdrop-filter: blur(15px);
+        border: 1px solid rgba(204, 255, 0, 0.3) !important;
+        box-shadow: 0 0 15px rgba(204, 255, 0, 0.05);
+        border-radius: 12px !important;
+    }
+
+    /* JUDUL DENGAN EFEK GLOW */
     h1 {
         font-family: 'Orbitron', sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 3px;
         background: linear-gradient(90deg, #ccff00, #00ffff);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
+        filter: drop-shadow(0 0 10px rgba(204, 255, 0, 0.5));
     }
 
-    button[kind="header"] { color: #ccff00 !important; }
+    /* SIDEBAR CUSTOMIZATION */
+    section[data-testid="stSidebar"] {
+        background-color: #030508 !important;
+        border-right: 1px solid rgba(204, 255, 0, 0.2);
+    }
 
-    /* Tabs Styling */
-    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
+    /* TABS STYLING */
+    .stTabs [data-baseweb="tab-list"] { gap: 15px; }
     .stTabs [data-baseweb="tab"] {
-        background-color: rgba(204, 255, 0, 0.05) !important;
-        border-radius: 5px 5px 0px 0px;
+        background-color: transparent !important;
+        border: 1px solid transparent !important;
         color: #888 !important;
+        transition: 0.3s;
     }
     .stTabs [aria-selected="true"] {
-        background-color: rgba(204, 255, 0, 0.15) !important;
+        border-bottom: 2px solid #ccff00 !important;
         color: #ccff00 !important;
+        text-shadow: 0 0 10px rgba(204, 255, 0, 0.5);
     }
     </style>
-    """, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
 # --- 2. AUTHENTICATION ---
 if "auth" not in st.session_state:
