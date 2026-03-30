@@ -434,43 +434,87 @@ def format_privacy(value, is_currency=True):
                         st.rerun()
         else: st.info("No active positions detected.")
 
-    with tab2:
-        conn = sqlite3.connect('users.db')
-        df_h = pd.read_sql_query("SELECT * FROM history WHERE username=? ORDER BY date ASC", conn, params=(user_now,))
-        conn.close()
+   with tab2:
+        st.subheader("📜 TRANSACTION_LOG")
+        
+        # Ambil data terbaru dari database
+        with sqlite3.connect('users.db') as conn:
+            df_h = pd.read_sql_query("SELECT * FROM history WHERE username=? ORDER BY date DESC", conn, params=(user_now,))
         
         if not df_h.empty:
             df_h['date'] = pd.to_datetime(df_h['date'])
-            df_h['P/L %'] = ((df_h['sell_price'] - df_h['buy_price']) / df_h['buy_price']) * 100
             
-            # --- HISTORY FILTERS ---
-            period = st.radio("TIME_RANGE", ["1 Month", "1 Year", "All Time"], horizontal=True)
+            # --- 1. FILTER RENTANG WAKTU ---
+            period = st.radio("TIME_SCOPE", ["1 Month", "1 Year", "All Time"], horizontal=True)
             now = datetime.now()
-            if period == "1 Month": df_h = df_h[df_h['date'] > (now - pd.DateOffset(months=1))]
-            elif period == "1 Year": df_h = df_h[df_h['date'] > (now - pd.DateOffset(years=1))]
+            if period == "1 Month": 
+                df_h = df_h[df_h['date'] > (now - pd.DateOffset(months=1))]
+            elif period == "1 Year": 
+                df_h = df_h[df_h['date'] > (now - pd.DateOffset(years=1))]
 
-            # --- CALCULATE AGGREGATES ---
+            # --- 2. CALCULATE STATISTICS ---
             total_profit = df_h[df_h['pnl'] > 0]['pnl'].sum()
             total_loss = df_h[df_h['pnl'] <= 0]['pnl'].sum()
             win_rate = (len(df_h[df_h['pnl'] > 0]) / len(df_h)) * 100 if len(df_h) > 0 else 0
             
             c1, c2, c3, c4 = st.columns(4)
-            c1.metric("TOTAL PROFIT", f"Rp {total_profit:,.0f}")
-            c2.metric("TOTAL CUT LOSS", f"Rp {total_loss:,.0f}", delta_color="inverse")
-            c3.metric("NET PNL", f"Rp {(total_profit + total_loss):,.0f}")
+            c1.metric("TOTAL PROFIT", format_privacy(total_profit))
+            c2.metric("TOTAL CUT LOSS", format_privacy(total_loss), delta_color="inverse")
+            c3.metric("NET GAIN", format_privacy(total_profit + total_loss))
             c4.metric("WIN RATE", f"{win_rate:.1f}%")
 
-            # --- EQUITY CURVE CHART ---
-            df_h['Cumulative PnL'] = df_h['pnl'].cumsum()
+            # --- 3. EQUITY CURVE ---
+            df_h_sorted = df_h.sort_values('date')
+            df_h_sorted['Cumulative PnL'] = df_h_sorted['pnl'].cumsum()
+            
             fig_curve = go.Figure()
-            fig_curve.add_trace(go.Scatter(x=df_h['date'], y=df_h['Cumulative PnL'], mode='lines+markers', line=dict(color='#ccff00', width=2), fill='tozeroy', fillcolor='rgba(204,255,0,0.1)', name="Equity Curve"))
-            fig_curve.update_layout(title="Growth Analysis (Equity Curve)", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=350, margin=dict(l=20, r=20, t=40, b=20))
+            fig_curve.add_trace(go.Scatter(
+                x=df_h_sorted['date'], 
+                y=df_h_sorted['Cumulative PnL'], 
+                mode='lines+markers',
+                line=dict(color='#ccff00', width=2),
+                fill='tozeroy',
+                fillcolor='rgba(204,255,0,0.1)',
+                name="Equity"
+            ))
+            fig_curve.update_layout(
+                template="plotly_dark", 
+                paper_bgcolor='rgba(0,0,0,0)', 
+                plot_bgcolor='rgba(0,0,0,0)',
+                height=300,
+                yaxis=dict(showticklabels=not privacy_mode) # Sembunyikan angka jika Privacy Mode ON
+            )
             st.plotly_chart(fig_curve, use_container_width=True)
 
-            # --- DETAILED LOG ---
-            st.dataframe(df_h[['date', 'ticker', 'buy_price', 'sell_price', 'lots', 'pnl', 'P/L %']].sort_values('date', ascending=False), use_container_width=True, hide_index=True)
+            # --- 4. LIST TRANSAKSI DENGAN FITUR HAPUS ---
+            st.markdown("---")
+            for idx, h_row in df_h.iterrows():
+                # Warna label berdasarkan profit/loss
+                pnl_color = "#ccff00" if h_row['pnl'] >= 0 else "#ff4b4b"
+                pnl_text = format_privacy(h_row['pnl'])
+                
+                # Container Baris Riwayat
+                with st.expander(f"📅 {h_row['date'].strftime('%Y-%m-%d')} | {h_row['ticker']} | {pnl_text}"):
+                    col_info, col_action = st.columns([4, 1])
+                    
+                    with col_info:
+                        st.markdown(f"""
+                        **Detail Transaksi:**
+                        * Buy: `{format_privacy(h_row['buy_price'])}` | Sell: `{format_privacy(h_row['sell_price'])}`
+                        * Volume: `{h_row['lots']} Lots`
+                        * Net P/L: <span style="color:{pnl_color}; font-weight:bold;">{pnl_text}</span>
+                        """, unsafe_allow_html=True)
+                    
+                    with col_action:
+                        # Tombol Hapus Spesifik ID
+                        if st.button("🗑️ DELETE", key=f"del_hist_{h_row['id']}", use_container_width=True):
+                            with sqlite3.connect('users.db') as conn:
+                                conn.execute("DELETE FROM history WHERE id=?", (h_row['id'],))
+                            st.toast(f"Record {h_row['ticker']} Berhasil Dihapus!")
+                            st.rerun()
+
         else:
-            st.info("No trading history recorded.")
+            st.info("No trading history found in this period.")
 
 elif menu == "USER MANAGEMENT":
     st.title("👤 ACCESS_CONTROL")
