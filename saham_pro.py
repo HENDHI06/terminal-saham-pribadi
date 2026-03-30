@@ -346,60 +346,124 @@ if menu == "STRATEGY SCANNER":
             fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=500, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
             st.plotly_chart(fig, use_container_width=True)
 
+# --- 5. CONTENT: MONEY MANAGEMENT (UPDATED) ---
 elif menu == "MONEY MANAGEMENT":
-    st.title("💰 MONEY_MANAGEMENT")
+    st.title("💰 MONEY_INTELLIGENCE")
+    
     tab1, tab2 = st.tabs(["📈 ACTIVE PORTFOLIO", "📜 TRADING HISTORY"])
+    
     with tab1:
         with st.expander("➕ ADD NEW POSITION"):
             with st.form("add_p"):
                 c1, c2, c3 = st.columns(3)
-                t_in = c1.text_input("Ticker"); p_in = c2.number_input("Buy Price", min_value=0.0); l_in = c3.number_input("Lots", min_value=1)
-                if st.form_submit_button("SAVE"):
-                    if t_in: add_to_portfolio(user_now, t_in, p_in, l_in, 0, 0); st.rerun()
+                t_in = c1.text_input("Ticker (Tanpa .JK)")
+                p_in = c2.number_input("Buy Price", min_value=0.0)
+                l_in = c3.number_input("Lots", min_value=1)
+                if st.form_submit_button("AUTHORIZE PURCHASE"):
+                    if t_in: 
+                        add_to_portfolio(user_now, t_in, p_in, l_in, 0, 0)
+                        st.rerun()
+
         df_p = get_user_portfolio(user_now, role)
         if not df_p.empty:
-            tickers = [f"{t}.JK" for t in df_p['ticker'].unique()]
+            # Fetch Live Prices
+            tickers_jk = [f"{t}.JK" for t in df_p['ticker'].unique()]
             try:
-                live_data = yf.download(tickers, period="1d", progress=False)['Close']
-                live_prices = live_data.iloc[-1].to_dict() if len(tickers) > 1 else {tickers[0]: live_data.iloc[-1]}
+                live_data = yf.download(tickers_jk, period="1d", progress=False)['Close']
+                if isinstance(live_data, pd.Series):
+                    live_prices = {tickers_jk[0]: live_data.iloc[-1]}
+                else:
+                    live_prices = live_data.iloc[-1].to_dict()
             except: live_prices = {}
+
             def calc_active(row):
                 tk = f"{row['ticker']}.JK"
                 curr = live_prices.get(tk, row['buy_price'])
                 if isinstance(curr, (pd.Series, pd.DataFrame)): curr = curr.iloc[0]
-                cost = float(row['buy_price'] * row['lots'] * 100); val = float(curr * row['lots'] * 100)
+                cost = float(row['buy_price'] * row['lots'] * 100)
+                val = float(curr * row['lots'] * 100)
                 return pd.Series([float(curr), cost, val, (val-cost)])
+
             df_p[['Live', 'Cost', 'Value', 'P/L']] = df_p.apply(calc_active, axis=1)
+            
+            # --- DASHBOARD METRICS ---
             m1, m2, m3 = st.columns(3)
-            t_inv, t_pl = df_p['Cost'].sum(), df_p['P/L'].sum()
-            m1.metric("INVESTMENT", f"Rp {t_inv:,.0f}")
+            t_inv = df_p['Cost'].sum()
+            t_pl = df_p['P/L'].sum()
+            m1.metric("TOTAL INVESTMENT", f"Rp {t_inv:,.0f}")
             m2.metric("FLOATING P/L", f"Rp {t_pl:,.0f}", f"{(t_pl/t_inv*100 if t_inv!=0 else 0):.2f}%")
-            m3.metric("BALANCE", f"Rp {t_inv+t_pl:,.0f}")
+            m3.metric("CURRENT VALUE", f"Rp {t_inv+t_pl:,.0f}")
+
+            # --- PORTFOLIO VISUALIZATION ---
+            col_chart, col_list = st.columns([1, 1])
+            with col_chart:
+                fig_pie = go.Figure(data=[go.Pie(labels=df_p['ticker'], values=df_p['Value'], hole=.4, marker=dict(colors=['#ccff00', '#00ffff', '#ff00ff', '#ffffff']))])
+                fig_pie.update_layout(title="Asset Allocation", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', showlegend=False, height=300)
+                st.plotly_chart(fig_pie, use_container_width=True)
+            
+            with col_list:
+                for i, row in df_p.iterrows():
+                    clr = "#ccff00" if row['P/L'] >= 0 else "#ff4b4b"
+                    st.markdown(f"""
+                        <div style='border:1px solid {clr}33; padding:10px; border-radius:5px; margin-bottom:5px; background:rgba(0,0,0,0.2)'>
+                            <small>{row['ticker']}</small><br>
+                            <b style='color:{clr}'>P/L: Rp {row['P/L']:,.0f}</b>
+                        </div>
+                    """, unsafe_allow_html=True)
+
+            # --- MANAGEMENT TABLE ---
+            st.dataframe(df_p.drop(columns=['username','tp_price','cl_price']), use_container_width=True, hide_index=True)
+            
             for i, row in df_p.iterrows():
-                with st.expander(f"MANAGE: {row['ticker']} ({row['lots']} Lots)"):
+                with st.expander(f"EXECUTE SELL: {row['ticker']}"):
                     cs, cd = st.columns([3, 1])
-                    s_price = cs.number_input(f"Jual {row['ticker']}", value=float(row['Live']), key=f"s_{row['id']}")
-                    if cs.button(f"🚀 SELL {row['ticker']}", key=f"btn_s_{row['id']}", use_container_width=True):
+                    s_price = cs.number_input(f"Sell Price", value=float(row['Live']), key=f"s_{row['id']}")
+                    if cs.button(f"CONFIRM SELL {row['ticker']}", key=f"btn_s_{row['id']}", use_container_width=True):
                         sell_position(user_now, row['id'], row['ticker'], row['buy_price'], s_price, row['lots'])
                         st.rerun()
-                    if cd.button("🗑️", key=f"btn_d_{row['id']}", use_container_width=True):
-                        conn = sqlite3.connect('users.db'); conn.cursor().execute("DELETE FROM portfolio WHERE id=?", (row['id'],)); conn.commit(); conn.close(); st.rerun()
-            st.dataframe(df_p.drop(columns=['username','tp_price','cl_price']), use_container_width=True, hide_index=True)
-        else: st.info("Belum ada posisi.")
+                    if cd.button("DEL", key=f"btn_d_{row['id']}", use_container_width=True):
+                        with sqlite3.connect('users.db') as conn:
+                            conn.execute("DELETE FROM portfolio WHERE id=?", (row['id'],))
+                        st.rerun()
+        else: st.info("No active positions detected.")
 
     with tab2:
         conn = sqlite3.connect('users.db')
-        df_h = pd.read_sql_query("SELECT * FROM history WHERE username=? ORDER BY date DESC", conn, params=(user_now,))
+        df_h = pd.read_sql_query("SELECT * FROM history WHERE username=? ORDER BY date ASC", conn, params=(user_now,))
         conn.close()
+        
         if not df_h.empty:
             df_h['date'] = pd.to_datetime(df_h['date'])
             df_h['P/L %'] = ((df_h['sell_price'] - df_h['buy_price']) / df_h['buy_price']) * 100
-            for idx, h_row in df_h.iterrows():
-                with st.expander(f"{h_row['date'].strftime('%Y-%m-%d')} | {h_row['ticker']} | {h_row['P/L %']:.2f}%"):
-                    st.write(f"Beli: {h_row['buy_price']:,.0f} | Jual: {h_row['sell_price']:,.0f} | Net: Rp {h_row['pnl']:,.0f}")
-                    if st.button(f"🗑️ Hapus Record {h_row['id']}", key=f"del_h_{h_row['id']}"):
-                        conn = sqlite3.connect('users.db'); conn.cursor().execute("DELETE FROM history WHERE id=?", (h_row['id'],)); conn.commit(); conn.close(); st.rerun()
-            st.dataframe(df_h.drop(columns=['id', 'username']), use_container_width=True, hide_index=True)
+            
+            # --- HISTORY FILTERS ---
+            period = st.radio("TIME_RANGE", ["1 Month", "1 Year", "All Time"], horizontal=True)
+            now = datetime.now()
+            if period == "1 Month": df_h = df_h[df_h['date'] > (now - pd.DateOffset(months=1))]
+            elif period == "1 Year": df_h = df_h[df_h['date'] > (now - pd.DateOffset(years=1))]
+
+            # --- CALCULATE AGGREGATES ---
+            total_profit = df_h[df_h['pnl'] > 0]['pnl'].sum()
+            total_loss = df_h[df_h['pnl'] <= 0]['pnl'].sum()
+            win_rate = (len(df_h[df_h['pnl'] > 0]) / len(df_h)) * 100 if len(df_h) > 0 else 0
+            
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("TOTAL PROFIT", f"Rp {total_profit:,.0f}")
+            c2.metric("TOTAL CUT LOSS", f"Rp {total_loss:,.0f}", delta_color="inverse")
+            c3.metric("NET PNL", f"Rp {(total_profit + total_loss):,.0f}")
+            c4.metric("WIN RATE", f"{win_rate:.1f}%")
+
+            # --- EQUITY CURVE CHART ---
+            df_h['Cumulative PnL'] = df_h['pnl'].cumsum()
+            fig_curve = go.Figure()
+            fig_curve.add_trace(go.Scatter(x=df_h['date'], y=df_h['Cumulative PnL'], mode='lines+markers', line=dict(color='#ccff00', width=2), fill='tozeroy', fillcolor='rgba(204,255,0,0.1)', name="Equity Curve"))
+            fig_curve.update_layout(title="Growth Analysis (Equity Curve)", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=350, margin=dict(l=20, r=20, t=40, b=20))
+            st.plotly_chart(fig_curve, use_container_width=True)
+
+            # --- DETAILED LOG ---
+            st.dataframe(df_h[['date', 'ticker', 'buy_price', 'sell_price', 'lots', 'pnl', 'P/L %']].sort_values('date', ascending=False), use_container_width=True, hide_index=True)
+        else:
+            st.info("No trading history recorded.")
 
 elif menu == "USER MANAGEMENT":
     st.title("👤 ACCESS_CONTROL")
