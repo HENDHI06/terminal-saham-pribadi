@@ -281,30 +281,41 @@ def run_scan(tickers, mode):
                     chg = ((c_now - float(prev['Close'])) / float(prev['Close'])) * 100
                     val = c_now * vol
                     
-                    # 2. BSJP & HOLD Logic
-                    # BSJP: Beli Sore Jual Pagi (Strong Close)
-                    # HOLD: Uptrend kuat, diatas MA50
+                    # 2. BSJP & HOLD Logic (RE-ACTIVATED SUPER BSJP)
                     sig = "-"
-                    if c_now >= (h_now * 0.99) and chg > 3: sig = "🚀 BSJP"
-                    elif c_now > ma50 and ma20 > ma50 and rsi < 70: sig = "💎 HOLD"
+                    
+                    # Cek apakah harga tutup di harga tertinggi (High) atau sangat dekat
+                    is_strong_close = c_now >= (h_now * 0.99) 
+                    # Hitung rata-rata volume 5 hari sebelumnya
+                    vol_avg5 = df_t['Volume'].iloc[-6:-1].mean()
+                    
+                    # Hierarki Sinyal
+                    if is_strong_close and chg > 5 and vol > (vol_avg5 * 2):
+                        sig = "⚡ SUPER BSJP"
+                    elif is_strong_close and chg > 3:
+                        sig = "🚀 BSJP"
+                    elif c_now > ma50 and ma20 > ma50 and rsi < 70:
+                        sig = "💎 HOLD"
 
-                    # Filters
+                    # Filters (Kriteria Saham Masuk List Scanner)
                     if mode == "Ketat":
-                        cond = (val > 1_000_000_000 and 2.5 < chg < 15 and c_now > ma20 and vol_spike)
+                        cond = (val > 1_000_000_000 and 2.5 < chg < 15 and c_now > ma20 and vol > vol_avg5)
                     else:
-                        cond = (val > 200_000_000 and chg > 1.5 and vol_spike)
+                        cond = (val > 200_000_000 and chg > 1.5 and vol > vol_avg5)
                     
                     if cond:
                         results.append({
-                            "TICKER": t.replace(".JK",""), "LAST": int(c_now), "CHG%": round(chg, 2), 
-                            "SIGNAL": sig, "RSI": round(rsi, 1),
+                            "TICKER": t.replace(".JK",""), 
+                            "LAST": int(c_now), 
+                            "CHG%": round(chg, 2), 
+                            "SIGNAL": sig, # <--- Sinyal Super BSJP akan muncul di sini
+                            "RSI": round(rsi, 1),
                             "ENTRY": f"{int(c_now)}-{int(c_now*1.01)}", 
-                            "TP": int(c_now*1.03), "CL": int(c_now*0.97), "VAL(M)": round(val/1_000_000, 1), "FULL": t
+                            "TP": int(c_now*1.03), 
+                            "CL": int(c_now*0.97), 
+                            "VAL(M)": round(val/1_000_000, 1), 
+                            "FULL": t
                         })
-                except: continue
-        except: continue
-    status_ui.empty(); p_bar.empty()
-    return pd.DataFrame(results)
 
 # --- 4. NAVIGATION ---
 role = st.session_state["auth"]["role"]
