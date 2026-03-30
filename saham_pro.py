@@ -346,11 +346,10 @@ if menu == "STRATEGY SCANNER":
             fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=500, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
             st.plotly_chart(fig, use_container_width=True)
 
-# --- 5. CONTENT: MONEY MANAGEMENT ---
 elif menu == "MONEY MANAGEMENT":
     st.title("💰 MONEY_INTELLIGENCE")
     
-    # Tambahkan Privacy Mode di sini agar sejajar
+    # --- PRIVACY MODE SETUP ---
     privacy_mode = st.checkbox("🕶️ PRIVACY MODE (Hide Balances)", value=False)
 
     def format_privacy(value, is_currency=True):
@@ -360,24 +359,123 @@ elif menu == "MONEY MANAGEMENT":
 
     tab1, tab2 = st.tabs(["📈 ACTIVE PORTFOLIO", "📜 TRADING HISTORY"])
     
+    # --- TAB 1: ACTIVE PORTFOLIO ---
     with tab1:
-        # Isi kode tab 1 kamu (Add New Position, dll)
-        st.subheader("Active Positions")
-        # ... kode lainnya ...
+        with st.expander("➕ ADD NEW POSITION", expanded=False):
+            with st.form("form_add_portfolio", clear_on_submit=True):
+                c1, c2, c3 = st.columns(3)
+                t_in = c1.text_input("Ticker (Contoh: BBCA)")
+                p_in = c2.number_input("Buy Price", min_value=0, step=1)
+                l_in = c3.number_input("Lots", min_value=1, step=1)
+                
+                submit_add = st.form_submit_button("SAVE TO PORTFOLIO")
+                
+                if submit_add:
+                    if t_in and p_in > 0:
+                        # Fungsi add_to_portfolio dipanggil di sini
+                        add_to_portfolio(user_now, t_in, p_in, l_in, 0, 0)
+                        st.success(f"Berhasil menambahkan {t_in.upper()}")
+                        st.rerun()
+                    else:
+                        st.error("Isi Ticker dan Harga Beli dengan benar!")
 
-    with tab2:  # <-- Pastikan baris ini sejajar lurus dengan 'with tab1'
+        # Menampilkan Data Portfolio
+        df_p = get_user_portfolio(user_now, role)
+        if not df_p.empty:
+            # Ambil harga live
+            tickers_jk = [f"{t}.JK" for t in df_p['ticker'].unique()]
+            try:
+                live_data = yf.download(tickers_jk, period="1d", progress=False)['Close']
+                if len(tickers_jk) > 1:
+                    live_prices = live_data.iloc[-1].to_dict()
+                else:
+                    live_prices = {tickers_jk[0]: live_data.iloc[-1]}
+            except:
+                live_prices = {}
+
+            def calc_active(row):
+                tk = f"{row['ticker']}.JK"
+                curr = live_prices.get(tk, row['buy_price'])
+                if isinstance(curr, (pd.Series, pd.DataFrame)): curr = curr.iloc[0]
+                cost = float(row['buy_price'] * row['lots'] * 100)
+                val = float(curr * row['lots'] * 100)
+                return pd.Series([float(curr), cost, val, (val-cost)])
+
+            df_p[['Live', 'Cost', 'Value', 'P/L']] = df_p.apply(calc_active, axis=1)
+            
+            # Metrics
+            m1, m2, m3 = st.columns(3)
+            t_inv = df_p['Cost'].sum()
+            t_pl = df_p['P/L'].sum()
+            m1.metric("INVESTMENT", format_privacy(t_inv))
+            m2.metric("FLOATING P/L", format_privacy(t_pl), f"{(t_pl/t_inv*100 if t_inv!=0 else 0):.2f}%")
+            m3.metric("TOTAL VALUE", format_privacy(t_inv + t_pl))
+
+            # Chart Komposisi
+            fig_pie = go.Figure(data=[go.Pie(labels=df_p['ticker'], values=df_p['Value'], hole=.3)])
+            fig_pie.update_layout(template="plotly_dark", height=300, paper_bgcolor='rgba(0,0,0,0)', showlegend=True)
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+            # Tabel (Privacy Mode aware)
+            df_display = df_p.copy()
+            if privacy_mode:
+                for col in ['buy_price', 'Live', 'Cost', 'Value', 'P/L']:
+                    df_display[col] = "*****"
+            
+            st.dataframe(df_display.drop(columns=['username','tp_price','cl_price']), use_container_width=True, hide_index=True)
+            
+            # Tombol Jual
+            for i, row in df_p.iterrows():
+                with st.expander(f"MANAGE {row['ticker']}"):
+                    cs, cd = st.columns([3, 1])
+                    s_price = cs.number_input(f"Harga Jual {row['ticker']}", value=float(row['Live']), key=f"sell_val_{row['id']}")
+                    if cs.button(f"🚀 SELL {row['ticker']}", key=f"btn_sell_{row['id']}", use_container_width=True):
+                        sell_position(user_now, row['id'], row['ticker'], row['buy_price'], s_price, row['lots'])
+                        st.rerun()
+                    if cd.button("🗑️", key=f"btn_del_port_{row['id']}", use_container_width=True):
+                        with sqlite3.connect('users.db') as conn:
+                            conn.execute("DELETE FROM portfolio WHERE id=?", (row['id'],))
+                        st.rerun()
+        else:
+            st.info("Portfolio kosong.")
+
+    # --- TAB 2: TRADING HISTORY ---
+    with tab2:
         st.subheader("📜 TRANSACTION_LOG")
-        
-        # Ambil data dari database
         with sqlite3.connect('users.db') as conn:
             df_h = pd.read_sql_query("SELECT * FROM history WHERE username=? ORDER BY date DESC", conn, params=(user_now,))
         
         if not df_h.empty:
-            # ... Masukkan sisa kode Trading History di sini ...
-            st.write("Data ditemukan")
-        else:
-            st.info("No trading history found.")
+            df_h['date'] = pd.to_datetime(df_h['date'])
+            
+            # Stats History
+            total_profit = df_h[df_h['pnl'] > 0]['pnl'].sum()
+            total_loss = df_h[df_h['pnl'] <= 0]['pnl'].sum()
+            
+            c1, c2, c3 = st.columns(3)
+            c1.metric("PROFIT", format_privacy(total_profit))
+            c2.metric("LOSS", format_privacy(total_loss), delta_color="inverse")
+            c3.metric("NET", format_privacy(total_profit + total_loss))
 
+            # Equity Curve
+            df_curve = df_h.sort_values('date')
+            df_curve['cum_pnl'] = df_curve['pnl'].cumsum()
+            fig_curve = go.Figure(go.Scatter(x=df_curve['date'], y=df_curve['cum_pnl'], mode='lines+markers', line=dict(color='#ccff00')))
+            fig_curve.update_layout(template="plotly_dark", height=250, paper_bgcolor='rgba(0,0,0,0)', 
+                                    yaxis=dict(showticklabels=not privacy_mode))
+            st.plotly_chart(fig_curve, use_container_width=True)
+
+            # List History dengan Tombol Hapus
+            for idx, h_row in df_h.iterrows():
+                with st.expander(f"{h_row['date'].strftime('%Y-%m-%d')} | {h_row['ticker']} | {format_privacy(h_row['pnl'])}"):
+                    col_txt, col_btn = st.columns([4,1])
+                    col_txt.write(f"Beli: {format_privacy(h_row['buy_price'])} | Jual: {format_privacy(h_row['sell_price'])} | Vol: {h_row['lots']} Lot")
+                    if col_btn.button("🗑️ Hapus", key=f"del_h_{h_row['id']}"):
+                        with sqlite3.connect('users.db') as conn:
+                            conn.execute("DELETE FROM history WHERE id=?", (h_row['id'],))
+                        st.rerun()
+        else:
+            st.info("Belum ada riwayat transaksi.")
 elif menu == "USER MANAGEMENT":
     st.title("👤 ACCESS_CONTROL")
     conn = sqlite3.connect('users.db')
