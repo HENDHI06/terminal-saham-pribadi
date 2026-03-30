@@ -2,175 +2,59 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 from datetime import datetime
 import sqlite3
 import warnings
-import os
-import requests 
-import pytz 
+import hashlib
 
 # --- 0. CONFIG & DATABASE SETUP ---
 warnings.filterwarnings("ignore", category=FutureWarning)
-st.set_page_config(page_title="IDX CYBER TERMINAL", page_icon="⚡", layout="wide")
+st.set_page_config(page_title="IDX CYBER TERMINAL PRO", page_icon="⚡", layout="wide")
+
+def hash_password(password):
+    return hashlib.sha256(str.encode(password)).hexdigest()
 
 def init_db():
-    conn = sqlite3.connect('users.db')
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS users 
-                 (username TEXT PRIMARY KEY, password TEXT, role TEXT, 
-                  last_login TEXT, ip_address TEXT, location TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS portfolio 
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  username TEXT, ticker TEXT, buy_price REAL, 
-                  lots INTEGER, tp_price REAL, cl_price REAL, date TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS history 
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  username TEXT, ticker TEXT, buy_price REAL, 
-                  sell_price REAL, lots INTEGER, pnl REAL, date TEXT)''')
-    c.execute("INSERT OR IGNORE INTO users (username, password, role) VALUES ('admin', 'admin123', 'admin')")
-    conn.commit()
-    conn.close()
+    with sqlite3.connect('users.db') as conn:
+        c = conn.cursor()
+        c.execute('''CREATE TABLE IF NOT EXISTS users 
+                     (username TEXT PRIMARY KEY, password TEXT, role TEXT)''')
+        c.execute('''CREATE TABLE IF NOT EXISTS portfolio 
+                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      username TEXT, ticker TEXT, buy_price REAL, 
+                      lots INTEGER, date TEXT)''')
+        c.execute('''CREATE TABLE IF NOT EXISTS history 
+                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      username TEXT, ticker TEXT, buy_price REAL, 
+                      sell_price REAL, lots INTEGER, pnl REAL, date TEXT)''')
+        admin_pass = hash_password('admin123')
+        c.execute("INSERT OR IGNORE INTO users (username, password, role) VALUES ('admin', ?, 'admin')", (admin_pass,))
+        conn.commit()
 
-def get_visitor_info():
-    providers = ['https://ipapi.co/json/', 'https://ipinfo.io/json', 'https://ifconfig.co/json']
-    for url in providers:
-        try:
-            response = requests.get(url, timeout=3).json()
-            ip = response.get('ip') or response.get('query', 'Unknown')
-            city = response.get('city', 'Unknown')
-            region = response.get('region', 'Unknown') or response.get('regionName', 'Unknown')
-            if ip != 'Unknown': return ip, f"{city}, {region}"
-        except: continue
-    return "Cloud Node", "Data Center"
-
-def update_login_info(u):
-    ip, loc = get_visitor_info()
-    tz = pytz.timezone('Asia/Jakarta') 
-    now = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
-    conn = sqlite3.connect('users.db')
-    c = conn.cursor()
-    c.execute("UPDATE users SET last_login=?, ip_address=?, location=? WHERE username=?", (now, ip, loc, u))
-    conn.commit()
-    conn.close()
-
-def get_sidebar_log(u):
-    conn = sqlite3.connect('users.db')
-    c = conn.cursor()
-    c.execute("SELECT last_login, ip_address, location FROM users WHERE username=?", (u,))
-    res = c.fetchone()
-    conn.close()
-    return res if res else ("-", "-", "-")
-
-def check_login_db(u, p):
-    conn = sqlite3.connect('users.db')
-    c = conn.cursor()
-    c.execute("SELECT role FROM users WHERE username=? AND password=?", (u, p))
-    res = c.fetchone()
-    conn.close()
-    return res[0] if res else None
-
-def add_to_portfolio(u, t, p, l, tp, cl):
-    conn = sqlite3.connect('users.db')
-    c = conn.cursor()
-    c.execute("INSERT INTO portfolio (username, ticker, buy_price, lots, tp_price, cl_price, date) VALUES (?, ?, ?, ?, ?, ?, ?)",
-              (u, t.upper().strip(), p, l, tp, cl, datetime.now().strftime("%Y-%m-%d")))
-    conn.commit(); conn.close()
+def add_to_portfolio(u, t, p, l):
+    with sqlite3.connect('users.db') as conn:
+        conn.execute("INSERT INTO portfolio (username, ticker, buy_price, lots, date) VALUES (?, ?, ?, ?, ?)",
+                     (u, t.upper().strip(), p, l, datetime.now().strftime("%Y-%m-%d")))
 
 def sell_position(u, row_id, ticker, buy_p, sell_p, lots):
     pnl = (sell_p - buy_p) * lots * 100
     date_now = datetime.now().strftime("%Y-%m-%d")
-    conn = sqlite3.connect('users.db')
-    c = conn.cursor()
-    c.execute("INSERT INTO history (username, ticker, buy_price, sell_price, lots, pnl, date) VALUES (?, ?, ?, ?, ?, ?, ?)",
-              (u, ticker, buy_p, sell_p, lots, pnl, date_now))
-    c.execute("DELETE FROM portfolio WHERE id=?", (row_id,))
-    conn.commit(); conn.close()
-
-def get_user_portfolio(u, r):
-    conn = sqlite3.connect('users.db')
-    if r == 'admin':
-        df = pd.read_sql_query("SELECT * FROM portfolio ORDER BY date DESC", conn)
-    else:
-        df = pd.read_sql_query("SELECT * FROM portfolio WHERE username=? ORDER BY date DESC", conn, params=(u,))
-    conn.close(); return df
-
-def add_user_db(u, p, r):
-    try:
-        conn = sqlite3.connect('users.db')
-        c = conn.cursor()
-        c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", (u, p, r))
-        conn.commit(); conn.close(); return True
-    except: return False
-
-def delete_user_db(u):
-    if u == 'admin': return False
-    conn = sqlite3.connect('users.db')
-    c = conn.cursor()
-    c.execute("DELETE FROM users WHERE username=?", (u,))
-    conn.commit(); conn.close(); return True
-
-def update_password_db(u, new_p):
-    try:
-        conn = sqlite3.connect('users.db')
-        c = conn.cursor()
-        c.execute("UPDATE users SET password=? WHERE username=?", (new_p, u))
-        conn.commit(); conn.close(); return True
-    except: return False
+    with sqlite3.connect('users.db') as conn:
+        conn.execute("INSERT INTO history (username, ticker, buy_price, sell_price, lots, pnl, date) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                     (u, ticker, buy_p, sell_p, lots, pnl, date_now))
+        conn.execute("DELETE FROM portfolio WHERE id=?", (row_id,))
 
 init_db()
 
-# --- 1. PRO CYBER STYLING (FIXED SIDEBAR BUTTON) ---
+# --- 1. CYBER STYLING ---
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@400;900&display=swap');
-    
-    [data-testid="stHeaderActionElements"], .stDeployButton, #MainMenu {
-        display: none !important;
-    }
-    
-    header { background-color: transparent !important; }
-
-    .stApp {
-        background-color: #05070a;
-        background-image: 
-            linear-gradient(rgba(204, 255, 0, 0.02) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(204, 255, 0, 0.02) 1px, transparent 1px),
-            linear-gradient(rgba(204, 255, 0, 0.05) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(204, 255, 0, 0.05) 1px, transparent 1px),
-            radial-gradient(circle at center, rgba(10, 25, 47, 0.4), #05070a);
-        background-size: 20px 20px, 20px 20px, 100px 100px, 100px 100px, 100% 100%;
-        font-family: 'JetBrains Mono', monospace;
-        color: #e0e0e0;
-    }
-
-    div[data-testid="stMetric"], .status-box, .stDataFrame, div[data-testid="stExpander"], .stTabs, .stForm {
-        background: rgba(0, 10, 20, 0.5) !important;
-        backdrop-filter: blur(12px);
-        border: 1px solid rgba(204, 255, 0, 0.15) !important;
-        border-radius: 10px !important;
-    }
-
-    h1 {
-        font-family: 'Orbitron', sans-serif;
-        background: linear-gradient(90deg, #ccff00, #00ffff);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-    }
-
-    button[kind="header"] { color: #ccff00 !important; }
-
-    /* Tabs Styling */
-    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
-    .stTabs [data-baseweb="tab"] {
-        background-color: rgba(204, 255, 0, 0.05) !important;
-        border-radius: 5px 5px 0px 0px;
-        color: #888 !important;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: rgba(204, 255, 0, 0.15) !important;
-        color: #ccff00 !important;
-    }
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono&family=Orbitron:wght@400;700&display=swap');
+    .stApp { background-color: #05070a; font-family: 'JetBrains Mono', monospace; color: #e0e0e0; }
+    h1, h2, h3 { font-family: 'Orbitron', sans-serif; color: #ccff00; text-shadow: 0 0 10px #ccff0055; }
+    div[data-testid="stMetric"] { background: rgba(204, 255, 0, 0.05); border: 1px solid #ccff0033; border-radius: 10px; padding: 15px; }
+    .stButton>button { background-color: #ccff00; color: black; font-weight: bold; border-radius: 5px; border: none; }
+    .stButton>button:hover { background-color: #e6ff80; color: black; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -179,322 +63,199 @@ if "auth" not in st.session_state:
     st.session_state["auth"] = {"logged_in": False, "user": None, "role": None}
 
 if not st.session_state["auth"]["logged_in"]:
-    _, col2, _ = st.columns([1,1.5,1])
-    with col2:
-        st.markdown("<div style='text-align:center; padding:50px 0;'><h1 style='font-size:3rem; margin-bottom:0;'>IDX</h1><p style='color:#888; letter-spacing:5px;'>CYBER TERMINAL</p></div>", unsafe_allow_html=True)
-        with st.form("login_form"):
-            u = st.text_input("OPERATOR ID").strip()
-            p = st.text_input("ACCESS KEY", type="password")
-            if st.form_submit_button("AUTHORIZE ACCESS", width="stretch"):
-                role = check_login_db(u, p)
-                if role:
-                    update_login_info(u)
-                    st.session_state["auth"] = {"logged_in": True, "user": u, "role": role}
-                    st.rerun()
-                else: st.error("ACCESS DENIED")
+    _, col, _ = st.columns([1, 1.5, 1])
+    with col:
+        st.markdown("<h1 style='text-align:center;'>IDX LOGIN</h1>", unsafe_allow_html=True)
+        u_in = st.text_input("OPERATOR ID")
+        p_in = st.text_input("ACCESS KEY", type="password")
+        if st.button("AUTHORIZE", use_container_width=True):
+            hp = hash_password(p_in)
+            with sqlite3.connect('users.db') as conn:
+                c = conn.cursor()
+                c.execute("SELECT role FROM users WHERE username=? AND password=?", (u_in, hp))
+                res = c.fetchone()
+            if res:
+                st.session_state["auth"] = {"logged_in": True, "user": u_in, "role": res[0]}
+                st.rerun()
+            else: st.error("ACCESS DENIED")
     st.stop()
 
-# --- 3. DATA ENGINE & MOBILE OPTIMIZATION ---
-@st.cache_data(ttl=86400)
-def load_tickers():
-    # Coba Internet
-    try:
-        url = "https://raw.githubusercontent.com/datasets-id/idx-stocks/main/data/stock_codes.csv"
-        df_idx = pd.read_csv(url)
-        tickers = [str(t).strip().upper() + ".JK" for t in df_idx['ticker'].tolist() if len(str(t)) <= 5]
-        if len(tickers) > 100: return tickers
-    except: pass
-    # Coba Excel Backup
-    try:
-        df = pd.read_excel("daftar_saham.xlsx")
-        col = 'Kode' if 'Kode' in df.columns else df.columns[0]
-        return [f"{str(t).strip().upper()}.JK" for t in df[col].tolist() if len(str(t)) <= 5]
-    except: return []
-
-def draw_mobile_cards(df):
-    for _, row in df.iterrows():
-        chg_color = "#ccff00" if row['CHG%'] > 0 else "#ff4b4b"
-        st.markdown(f"""
-        <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(204, 255, 0, 0.2); 
-                    border-radius: 12px; padding: 15px; margin-bottom: 12px; border-left: 5px solid {chg_color};">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <b style="font-size: 1.2rem; color: #ccff00;">{row['TICKER']}</b>
-                <span style="color: {chg_color}; font-weight: bold;">{row['CHG%']}% {row['VOL_S']}</span>
-            </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; font-size: 0.85rem; color: #bbb;">
-                <div>Last: <b style="color:#fff;">{row['LAST']}</b></div>
-                <div>Value: <b style="color:#fff;">{row['VAL(M)']}M</b></div>
-                <div style="color: #00ffff;">Entry: {row['ENTRY']}</div>
-                <div style="color: #00ff00;">TP: {row['TP']}</div>
-                <div style="color: #ff4b4b;">CL: {row['CL']}</div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-def run_scan(tickers, mode):
-    results = []
-    status_ui = st.empty(); p_bar = st.progress(0)
-    for i in range(0, len(tickers), 30):
-        batch = tickers[i:i+30]
-        status_ui.caption(f"SCANNING: {i}/{len(tickers)}")
-        p_bar.progress(min(i / len(tickers), 1.0))
-        try:
-            data = yf.download(batch, period="10d", interval="1d", group_by='ticker', progress=False, auto_adjust=True)
-            for t in batch:
-                try:
-                    df_t = data[t].dropna() if len(batch) > 1 else data.dropna()
-                    if len(df_t) < 6: continue
-                    df_t.columns = [c[0] if isinstance(c, tuple) else c for c in df_t.columns]
-                    last, prev = df_t.iloc[-1], df_t.iloc[-2]
-                    c_now, h_now = float(last['Close']), float(last['High'])
-                    vol, vol_avg5 = float(last['Volume']), df_t['Volume'].iloc[-6:-1].mean()
-                    vol_spike = vol > (vol_avg5 * 1.5)
-                    chg = ((c_now - float(prev['Close'])) / float(prev['Close'])) * 100
-                    val = c_now * vol
-                    if mode == "Ketat":
-                        cond = (val > 1_000_000_000 and 2.5 < chg < 12 and c_now >= (h_now * 0.985) and vol_spike)
-                    else:
-                        cond = (val > 200_000_000 and chg > 1.5 and vol_spike)
-                    if cond:
-                        results.append({
-                            "TICKER": t.replace(".JK",""), "LAST": int(c_now), "CHG%": round(chg, 2), 
-                            "VOL_S": "⚡ SPIKE" if vol_spike else "-", "ENTRY": f"{int(c_now)}-{int(c_now*1.01)}", 
-                            "TP": int(c_now*1.03), "CL": int(c_now*0.97), "VAL(M)": round(val/1_000_000, 1), "FULL": t
-                        })
-                except: continue
-        except: continue
-    status_ui.empty(); p_bar.empty()
-    return pd.DataFrame(results)
-
-# --- 4. NAVIGATION ---
-role = st.session_state["auth"]["role"]
+# --- 3. MAIN INTERFACE ---
 user_now = st.session_state["auth"]["user"]
-last_l, ip_l, loc_l = get_sidebar_log(user_now)
+role = st.session_state["auth"]["role"]
+menu = st.sidebar.radio("COMMAND CENTER", ["SCANNER PRO", "MONEY MANAGEMENT", "SECURITY"])
 
-st.sidebar.markdown(f"""
-    <div style='padding:15px; border:1px solid #ccff0033; border-radius:10px; background:rgba(204,255,0,0.05); margin-bottom:10px;'>
-        <h3 style='margin:0; color:#ccff00;'>{user_now.upper()}</h3>
-        <p style='margin:0; font-size:10px; color:#888;'>NODE ACTIVE | {role.upper()}</p>
-        <hr style='border:0.1px solid #ccff0022; margin:10px 0;'>
-        <p style='font-size:10px; color:#888;'>LST: {last_l}</p>
-        <p style='font-size:10px; color:#888;'>IP : {ip_l}</p>
-        <p style='font-size:10px; color:#888;'>LOC: {loc_l}</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-menu_list = ["STRATEGY SCANNER", "MONEY MANAGEMENT", "SECURITY SETTINGS"]
-if role == "admin": menu_list.insert(1, "USER MANAGEMENT")
-menu = st.sidebar.radio("COMMAND CENTER", menu_list)
-
-if st.sidebar.button("🔴 TERMINATE SESSION", width="stretch"):
+if st.sidebar.button("🔴 TERMINATE"):
     st.session_state["auth"] = {"logged_in": False}; st.rerun()
 
-# --- 5. CONTENT ---
-if menu == "STRATEGY SCANNER":
-    st.title("🛰️ MARKET_INTELLIGENCE")
-    try:
-        ihsg_hist = yf.Ticker("^JKSE").history(period="2d")
-        if len(ihsg_hist) >= 2:
-            prev_c, curr_c = ihsg_hist['Close'].iloc[-2], ihsg_hist['Close'].iloc[-1]
-            diff = curr_c - prev_c
-            clr = "#ccff00" if diff >= 0 else "#ff4b4b"
-            st.markdown(f"<div class='status-box' style='border-left-color:{clr} !important;'>IHSG: <span style='color:{clr}; font-weight:bold;'>{curr_c:,.2f} ({diff:+.2f})</span></div>", unsafe_allow_html=True)
-    except: pass
+# --- MENU: SCANNER PRO ---
+if menu == "SCANNER PRO":
+    st.title("🛰️ STRATEGY_SCANNER_PRO")
+    c_cfg, c_info = st.columns([1, 2])
+    with c_cfg:
+        min_miliar = st.number_input("Min Turnover (Miliar)", value=5.0)
+        min_up = st.slider("Min Price Up (%)", 0.5, 10.0, 2.0)
+    
+    if st.button("🚀 EXECUTE MULTI-STRATEGY SCAN", use_container_width=True):
+        # List Saham Potensial IDX (Bisa ditambah sesuai kebutuhan)
+        watch = ['BBCA.JK','BBRI.JK','BMRI.JK','TLKM.JK','ASII.JK','GOTO.JK','ADRO.JK','ITMG.JK','AMRT.JK','UNTR.JK','PTBA.JK','AKRA.JK','BRIS.JK','ANTM.JK','BBNI.JK','BRMS.JK','DEWA.JK','BUMI.JK','MEDC.JK','TPIA.JK']
+        results = []
+        bar = st.progress(0)
+        
+        for idx, t in enumerate(watch):
+            try:
+                df = yf.download(t, period="100d", progress=False)
+                if len(df) < 50: continue
+                
+                # Indikator Teknikal
+                df['MA20'] = df['Close'].rolling(window=20).mean()
+                df['MA50'] = df['Close'].rolling(window=50).mean()
+                delta = df['Close'].diff()
+                gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+                loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+                df['RSI'] = 100 - (100 / (1 + (gain/loss)))
+                
+                # Variabel Harga
+                p_now = float(df['Close'].iloc[-1])
+                p_prev = float(df['Close'].iloc[-2])
+                p_high = float(df['High'].iloc[-1])
+                v_now = float(df['Volume'].iloc[-1])
+                v_avg = float(df['Volume'].iloc[-20:-1].mean())
+                ma20 = float(df['MA20'].iloc[-1])
+                ma50 = float(df['MA50'].iloc[-1])
+                rsi = float(df['RSI'].iloc[-1])
+                turnover = (p_now * v_now) / 1_000_000_000
+                change = ((p_now - p_prev) / p_prev) * 100
+                
+                # --- LOGIKA PENENTUAN STRATEGI ---
+                action = ""
+                # Syarat BSJP: Harga ditutup sangat dekat dengan High harian (>99% dari High)
+                is_closing_strong = p_now >= (p_high * 0.995)
+                
+                # Syarat Uptrend Jangka Menengah: MA20 > MA50
+                is_uptrend_strong = ma20 > ma50
+                
+                if is_closing_strong and is_uptrend_strong:
+                    action = "🔥 SUPER SIGNAL (BSJP + HOLD)"
+                elif is_closing_strong:
+                    action = "🚀 BSJP (Beli Sore Jual Pagi)"
+                elif is_uptrend_strong and p_now > ma20:
+                    action = "💎 HOLD (Strong Uptrend)"
+                else:
+                    action = "🔎 MONITOR (Wait & See)"
 
-    c_algo, c_sync = st.columns([4, 1])
-    with c_algo: mode_scan = st.radio("ALGO_SENSITIVITY", ["Ketat", "Agresif"], horizontal=True)
-    with c_sync:
-        if st.button("🔄 REFRESH PRICE", use_container_width=True):
-            if 'results' in st.session_state and not st.session_state.results.empty:
-                current_tickers = [f"{t}.JK" for t in st.session_state.results['TICKER']]
-                try:
-                    new_data = yf.download(current_tickers, period="1d", progress=False)['Close']
-                    for idx, row in st.session_state.results.iterrows():
-                        tk = f"{row['TICKER']}.JK"
-                        st.session_state.results.at[idx, 'LAST'] = int(new_data[tk].iloc[-1]) if len(current_tickers) > 1 else int(new_data.iloc[-1])
-                    st.session_state.scan_time = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%H:%M:%S")
-                except: pass
-            st.rerun()
+                # FILTER UTAMA
+                if p_now > ma20 and 40 < rsi < 75 and turnover >= min_miliar and change >= min_up:
+                    results.append({
+                        "Ticker": t.replace(".JK",""), 
+                        "Price": f"{p_now:,.0f}", 
+                        "Change": f"{change:.2f}%", 
+                        "Action": action,
+                        "Turnover": f"{turnover:.1f}B",
+                        "RSI": f"{rsi:.1f}"
+                    })
+            except: pass
+            bar.progress((idx+1)/len(watch))
+        
+        if results:
+            st.success(f"Scan Complete: {len(results)} Opportunities Found!")
+            st.table(pd.DataFrame(results))
+        else:
+            st.warning("No valid signals. Market is neutral.")
 
-    if st.button("⚡ EXECUTE_DEEP_SCAN", width="stretch"):
-        st.session_state.results = run_scan(load_tickers(), mode_scan)
-        st.session_state.scan_time = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%H:%M:%S")
-
-    if 'results' in st.session_state:
-        df = st.session_state.results
-        if not df.empty:
-            st.caption(f"Last Sync: {st.session_state.scan_time} WIB")
-            
-            # TAB VIEW FOR MOBILE OPTIMIZATION
-            tab_desk, tab_mob = st.tabs(["🖥️ DESKTOP VIEW", "📱 MOBILE VIEW"])
-            with tab_desk: st.dataframe(df.drop(columns=['FULL']), use_container_width=True, hide_index=True)
-            with tab_mob: draw_mobile_cards(df)
-            
-            sel_t = st.selectbox("FOCUS_TARGET", df['TICKER'].tolist())
-            full_t = df[df['TICKER'] == sel_t]['FULL'].values[0]
-            chart_data = yf.download(full_t, period="6mo", interval="1d", progress=False, auto_adjust=True)
-            chart_data.columns = [c[0] if isinstance(c, tuple) else c for c in chart_data.columns]
-            chart_data['MA20'] = chart_data['Close'].rolling(20).mean()
-            delta = chart_data['Close'].diff(); gain = (delta.where(delta > 0, 0)).rolling(14).mean(); loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
-            chart_data['RSI'] = 100 - (100 / (1 + (gain/loss)))
-
-            fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_width=[0.2, 0.15, 0.65])
-            fig.add_trace(go.Candlestick(x=chart_data.index, open=chart_data['Open'], high=chart_data['High'], low=chart_data['Low'], close=chart_data['Close'], name="Price"), row=1, col=1)
-            fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['MA20'], line=dict(color='#ffcc00'), name="MA20"), row=1, col=1)
-            fig.add_trace(go.Bar(x=chart_data.index, y=chart_data['Volume'], name="Vol", opacity=0.4), row=2, col=1)
-            fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['RSI'], line=dict(color='#ff00ff'), name="RSI"), row=3, col=1)
-            fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=500, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-            st.plotly_chart(fig, use_container_width=True)
-
+# --- MENU: MONEY MANAGEMENT ---
 elif menu == "MONEY MANAGEMENT":
     st.title("💰 MONEY_INTELLIGENCE")
+    priv = st.checkbox("🕶️ PRIVACY MODE", value=False)
     
-    # --- PRIVACY MODE SETUP ---
-    privacy_mode = st.checkbox("🕶️ PRIVACY MODE (Hide Balances)", value=False)
+    def fmt(v, curr=True):
+        if priv: return "Rp *****" if curr else "*****"
+        return f"Rp {v:,.0f}" if curr else f"{v:,.0f}"
 
-    def format_privacy(value, is_currency=True):
-        if privacy_mode:
-            return "Rp *****" if is_currency else "*****"
-        return f"Rp {value:,.0f}" if is_currency else f"{value:,.0f}"
-
-    tab1, tab2 = st.tabs(["📈 ACTIVE PORTFOLIO", "📜 TRADING HISTORY"])
+    t1, t2 = st.tabs(["📈 ACTIVE PORTFOLIO", "📜 TRADING HISTORY"])
     
-    # --- TAB 1: ACTIVE PORTFOLIO ---
-    with tab1:
-        with st.expander("➕ ADD NEW POSITION", expanded=False):
-            with st.form("form_add_portfolio", clear_on_submit=True):
+    with t1:
+        with st.expander("➕ ADD NEW POSITION"):
+            with st.form("add_p", clear_on_submit=True):
                 c1, c2, c3 = st.columns(3)
-                t_in = c1.text_input("Ticker (Contoh: BBCA)")
-                p_in = c2.number_input("Buy Price", min_value=0, step=1)
-                l_in = c3.number_input("Lots", min_value=1, step=1)
-                
-                submit_add = st.form_submit_button("SAVE TO PORTFOLIO")
-                
-                if submit_add:
-                    if t_in and p_in > 0:
-                        # Fungsi add_to_portfolio dipanggil di sini
-                        add_to_portfolio(user_now, t_in, p_in, l_in, 0, 0)
-                        st.success(f"Berhasil menambahkan {t_in.upper()}")
-                        st.rerun()
-                    else:
-                        st.error("Isi Ticker dan Harga Beli dengan benar!")
+                tk = c1.text_input("Ticker")
+                bp = c2.number_input("Average Price", min_value=0)
+                lt = c3.number_input("Total Lots", min_value=1)
+                if st.form_submit_button("SAVE POSITION"):
+                    add_to_portfolio(user_now, tk, bp, lt); st.rerun()
 
-        # Menampilkan Data Portfolio
-        df_p = get_user_portfolio(user_now, role)
+        with sqlite3.connect('users.db') as conn:
+            df_p = pd.read_sql_query("SELECT * FROM portfolio WHERE username=?", conn, params=(user_now,))
+        
         if not df_p.empty:
-            # Ambil harga live
-            tickers_jk = [f"{t}.JK" for t in df_p['ticker'].unique()]
+            tickers = [f"{x}.JK" for x in df_p['ticker']]
             try:
-                live_data = yf.download(tickers_jk, period="1d", progress=False)['Close']
-                if len(tickers_jk) > 1:
-                    live_prices = live_data.iloc[-1].to_dict()
-                else:
-                    live_prices = {tickers_jk[0]: live_data.iloc[-1]}
-            except:
-                live_prices = {}
+                live = yf.download(tickers, period="1d", progress=False)['Close']
+                def calc(r):
+                    px = live[f"{r['ticker']}.JK"].iloc[-1] if len(tickers)>1 else live.iloc[-1]
+                    cost = r['buy_price'] * r['lots'] * 100
+                    val = px * r['lots'] * 100
+                    return pd.Series([px, cost, val, val-cost])
+                
+                df_p[['Live', 'Cost', 'Value', 'P/L']] = df_p.apply(calc, axis=1)
+                
+                m1, m2, m3 = st.columns(3)
+                inv_total = df_p['Cost'].sum()
+                pl_total = df_p['P/L'].sum()
+                m1.metric("TOTAL INVESTMENT", fmt(inv_total))
+                m2.metric("FLOATING P/L", fmt(pl_total), f"{(pl_total/inv_total*100):.2f}%")
+                m3.metric("CURRENT VALUE", fmt(inv_total + pl_total))
+                
+                fig = go.Figure(data=[go.Pie(labels=df_p['ticker'], values=df_p['Value'], hole=.4)])
+                fig.update_layout(template="plotly_dark", height=350, paper_bgcolor='rgba(0,0,0,0)', showlegend=True)
+                st.plotly_chart(fig, use_container_width=True)
+                
+                for i, r in df_p.iterrows():
+                    with st.expander(f"MANAGE {r['ticker']} | P/L: {fmt(r['P/L'])}"):
+                        c_s, c_d = st.columns([3,1])
+                        sp = c_s.number_input(f"Sell Price {r['ticker']}", value=float(r['Live']), key=f"s{r['id']}")
+                        if c_s.button(f"EXECUTE SELL {r['ticker']}", key=f"bs{r['id']}", use_container_width=True):
+                            sell_position(user_now, r['id'], r['ticker'], r['buy_price'], sp, r['lots']); st.rerun()
+                        if c_d.button("🗑️", key=f"bd{r['id']}", use_container_width=True, help="Delete without history"):
+                            with sqlite3.connect('users.db') as conn: conn.execute("DELETE FROM portfolio WHERE id=?", (r['id'],))
+                            st.rerun()
+            except: st.error("Error fetching live data. Check your internet.")
+        else: st.info("No active positions found.")
 
-            def calc_active(row):
-                tk = f"{row['ticker']}.JK"
-                curr = live_prices.get(tk, row['buy_price'])
-                if isinstance(curr, (pd.Series, pd.DataFrame)): curr = curr.iloc[0]
-                cost = float(row['buy_price'] * row['lots'] * 100)
-                val = float(curr * row['lots'] * 100)
-                return pd.Series([float(curr), cost, val, (val-cost)])
-
-            df_p[['Live', 'Cost', 'Value', 'P/L']] = df_p.apply(calc_active, axis=1)
-            
-            # Metrics
-            m1, m2, m3 = st.columns(3)
-            t_inv = df_p['Cost'].sum()
-            t_pl = df_p['P/L'].sum()
-            m1.metric("INVESTMENT", format_privacy(t_inv))
-            m2.metric("FLOATING P/L", format_privacy(t_pl), f"{(t_pl/t_inv*100 if t_inv!=0 else 0):.2f}%")
-            m3.metric("TOTAL VALUE", format_privacy(t_inv + t_pl))
-
-            # Chart Komposisi
-            fig_pie = go.Figure(data=[go.Pie(labels=df_p['ticker'], values=df_p['Value'], hole=.3)])
-            fig_pie.update_layout(template="plotly_dark", height=300, paper_bgcolor='rgba(0,0,0,0)', showlegend=True)
-            st.plotly_chart(fig_pie, use_container_width=True)
-
-            # Tabel (Privacy Mode aware)
-            df_display = df_p.copy()
-            if privacy_mode:
-                for col in ['buy_price', 'Live', 'Cost', 'Value', 'P/L']:
-                    df_display[col] = "*****"
-            
-            st.dataframe(df_display.drop(columns=['username','tp_price','cl_price']), use_container_width=True, hide_index=True)
-            
-            # Tombol Jual
-            for i, row in df_p.iterrows():
-                with st.expander(f"MANAGE {row['ticker']}"):
-                    cs, cd = st.columns([3, 1])
-                    s_price = cs.number_input(f"Harga Jual {row['ticker']}", value=float(row['Live']), key=f"sell_val_{row['id']}")
-                    if cs.button(f"🚀 SELL {row['ticker']}", key=f"btn_sell_{row['id']}", use_container_width=True):
-                        sell_position(user_now, row['id'], row['ticker'], row['buy_price'], s_price, row['lots'])
-                        st.rerun()
-                    if cd.button("🗑️", key=f"btn_del_port_{row['id']}", use_container_width=True):
-                        with sqlite3.connect('users.db') as conn:
-                            conn.execute("DELETE FROM portfolio WHERE id=?", (row['id'],))
-                        st.rerun()
-        else:
-            st.info("Portfolio kosong.")
-
-    # --- TAB 2: TRADING HISTORY ---
-    with tab2:
-        st.subheader("📜 TRANSACTION_LOG")
+    with t2:
         with sqlite3.connect('users.db') as conn:
             df_h = pd.read_sql_query("SELECT * FROM history WHERE username=? ORDER BY date DESC", conn, params=(user_now,))
         
         if not df_h.empty:
             df_h['date'] = pd.to_datetime(df_h['date'])
-            
-            # Stats History
-            total_profit = df_h[df_h['pnl'] > 0]['pnl'].sum()
-            total_loss = df_h[df_h['pnl'] <= 0]['pnl'].sum()
-            
+            # Performance Stats
+            tp, tl = df_h[df_h['pnl']>0]['pnl'].sum(), df_h[df_h['pnl']<=0]['pnl'].sum()
             c1, c2, c3 = st.columns(3)
-            c1.metric("PROFIT", format_privacy(total_profit))
-            c2.metric("LOSS", format_privacy(total_loss), delta_color="inverse")
-            c3.metric("NET", format_privacy(total_profit + total_loss))
+            c1.metric("TOTAL PROFIT", fmt(tp))
+            c2.metric("TOTAL LOSS", fmt(tl), delta_color="inverse")
+            c3.metric("NET PERFORMANCE", fmt(tp+tl))
 
             # Equity Curve
-            df_curve = df_h.sort_values('date')
-            df_curve['cum_pnl'] = df_curve['pnl'].cumsum()
-            fig_curve = go.Figure(go.Scatter(x=df_curve['date'], y=df_curve['cum_pnl'], mode='lines+markers', line=dict(color='#ccff00')))
-            fig_curve.update_layout(template="plotly_dark", height=250, paper_bgcolor='rgba(0,0,0,0)', 
-                                    yaxis=dict(showticklabels=not privacy_mode))
-            st.plotly_chart(fig_curve, use_container_width=True)
-
-            # List History dengan Tombol Hapus
-            for idx, h_row in df_h.iterrows():
-                with st.expander(f"{h_row['date'].strftime('%Y-%m-%d')} | {h_row['ticker']} | {format_privacy(h_row['pnl'])}"):
-                    col_txt, col_btn = st.columns([4,1])
-                    col_txt.write(f"Beli: {format_privacy(h_row['buy_price'])} | Jual: {format_privacy(h_row['sell_price'])} | Vol: {h_row['lots']} Lot")
-                    if col_btn.button("🗑️ Hapus", key=f"del_h_{h_row['id']}"):
-                        with sqlite3.connect('users.db') as conn:
-                            conn.execute("DELETE FROM history WHERE id=?", (h_row['id'],))
+            df_c = df_h.sort_values('date')
+            df_c['cum'] = df_c['pnl'].cumsum()
+            fig_c = go.Figure(go.Scatter(x=df_c['date'], y=df_c['cum'], mode='lines+markers', line=dict(color='#ccff00', width=3), fill='tozeroy', fillcolor='rgba(204,255,0,0.1)'))
+            fig_c.update_layout(title="Capital Growth Curve", template="plotly_dark", height=300, paper_bgcolor='rgba(0,0,0,0)', yaxis=dict(showticklabels=not priv))
+            st.plotly_chart(fig_c, use_container_width=True)
+            
+            for i, h in df_h.iterrows():
+                with st.expander(f"📅 {h['date'].strftime('%d %b %Y')} | {h['ticker']} | {fmt(h['pnl'])}"):
+                    if st.button("🗑️ PURGE RECORD", key=f"dh{h['id']}", use_container_width=True):
+                        with sqlite3.connect('users.db') as conn: conn.execute("DELETE FROM history WHERE id=?", (h['id'],))
                         st.rerun()
-        else:
-            st.info("Belum ada riwayat transaksi.")
-elif menu == "USER MANAGEMENT":
-    st.title("👤 ACCESS_CONTROL")
-    conn = sqlite3.connect('users.db')
-    df_u = pd.read_sql_query("SELECT username, role, last_login, location FROM users", conn)
-    conn.close(); st.dataframe(df_u, use_container_width=True, hide_index=True)
-    c1, c2 = st.columns(2)
-    with c1:
-        with st.form("add_u"):
-            nu, np, nr = st.text_input("User"), st.text_input("Key", type="password"), st.selectbox("Role", ["user", "admin"])
-            if st.form_submit_button("GRANT"):
-                if add_user_db(nu, np, nr): st.success("Added"); st.rerun()
-    with c2:
-        du = st.text_input("Revoke ID")
-        if st.button("🔴 DELETE PERMANENTLY"):
-            if delete_user_db(du): st.warning("Removed"); st.rerun()
+        else: st.info("No trading history available.")
 
-elif menu == "SECURITY SETTINGS":
+# --- MENU: SECURITY ---
+elif menu == "SECURITY":
     st.title("🔒 SECURITY_VAULT")
-    with st.form("p"):
-        new_p = st.text_input("NEW ACCESS KEY", type="password")
-        if st.form_submit_button("UPDATE"):
-            if update_password_db(user_now, new_p): st.success("Updated")
+    new_key = st.text_input("New Operator Access Key", type="password")
+    if st.button("ENCRYPT & UPDATE"):
+        if new_key:
+            with sqlite3.connect('users.db') as conn:
+                conn.execute("UPDATE users SET password=? WHERE username=?", (hash_password(new_key), user_now))
+            st.success("Access Key Updated Successfully!")
+        else: st.error("Field cannot be empty.")
