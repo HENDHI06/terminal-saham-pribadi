@@ -430,12 +430,22 @@ elif menu == "MONEY MANAGEMENT":
                 return pd.Series([float(curr), cost, val, (val-cost)])
 
             df_p[['Live', 'Cost', 'Value', 'P/L']] = df_p.apply(calc_active, axis=1)
-            m1, m2, m3 = st.columns(3)
-            t_inv = df_p['Cost'].sum(); t_pl = df_p['P/L'].sum()
+            # --- BAGIAN METRIC PORTFOLIO ---
+            t_inv = float(df_p['Cost'].sum())
+            t_pl = float(df_p['P/L'].sum())
             
-            # Privacy Mode Fix pada Metrik
+            # Hitung persentase secara terpisah agar tidak bentrok dengan string '***'
+            percent_val = (t_pl / t_inv * 100) if t_inv != 0 else 0
+            
+            # Tentukan label delta (persentase)
+            if privacy_mode:
+                delta_display = "*****"
+            else:
+                delta_display = f"{percent_val:+.2f}%"
+
+            m1, m2, m3 = st.columns(3)
             m1.metric("INVESTMENT", format_privacy(t_inv))
-            m2.metric("FLOATING P/L", format_privacy(t_pl), f"{'***' if privacy_mode else (t_pl/t_inv*100 if t_inv!=0 else 0):.2f}%")
+            m2.metric("FLOATING P/L", format_privacy(t_pl), delta_display)
             m3.metric("TOTAL VALUE", format_privacy(t_inv + t_pl))
 
             fig_pie = go.Figure(data=[go.Pie(labels=df_p['ticker'], values=df_p['Value'], hole=.3)])
