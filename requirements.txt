@@ -2,6 +2,7 @@ streamlit
 yfinance
 pandas
 plotly
-requests
+feedparser
 pytz
+requests
 openpyxl
