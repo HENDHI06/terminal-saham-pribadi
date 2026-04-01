@@ -373,63 +373,33 @@ if menu == "STRATEGY SCANNER":
             # --- 2. TABEL DATA (Mendefinisikan Tab agar tidak Error) ---
             tab_desk, tab_mob = st.tabs(["🖥️ DESKTOP VIEW", "📱 MOBILE VIEW"])
             
-           with tab_desk:
-                # Menambahkan sedikit CSS khusus agar font tabel lebih tajam
-                st.markdown("""
-                    <style>
-                        [data-testid="stDataFrame"] {
-                            background: #0d1117;
-                            border: 1px solid #30363d;
-                            border-radius: 8px;
-                        }
-                    </style>
-                """, unsafe_allow_html=True)
-
-                st.dataframe(
-                    df.drop(columns=['FULL']),
-                    use_container_width=True,
+# 2. TAMPILKAN HASIL (Indentasi 4 spasi dari 'if menu')
+    if 'results' in st.session_state:
+        df = st.session_state.results # (8 spasi)
+        if not df.empty: # (8 spasi)
+            st.caption(f"Last Sync: {st.session_state.scan_time} WIB") # (12 spasi)
+            
+            # --- BAGIAN TABEL (DEFINISI TAB) ---
+            tab_desk, tab_mob = st.tabs(["🖥️ DESKTOP VIEW", "📱 MOBILE VIEW"]) # (12 spasi)
+            
+            with tab_desk: # <--- PASTIKAN BARIS INI SEJAJAR DENGAN 'tab_desk, tab_mob' di atas (12 spasi)
+                st.dataframe( # (16 spasi)
+                    df.drop(columns=['FULL']), 
+                    use_container_width=True, 
                     hide_index=True,
                     column_config={
-                        "TICKER": st.column_config.TextColumn(
-                            "TICKER", 
-                            help="Kode Saham",
-                            width="small"
-                        ),
-                        "LAST": st.column_config.NumberColumn(
-                            "PRICE", 
-                            format="%d", # Menghilangkan desimal .0
-                            width="small"
-                        ),
-                        "CHG%": st.column_config.NumberColumn(
-                            "CHANGE", 
-                            format="%.2f%%", # Format persentase
-                            width="small"
-                        ),
-                        "REKOMENDASI": st.column_config.TextColumn(
-                            "SIGNAL",
-                            width="medium"
-                        ),
-                        "VAL(M)": st.column_config.NumberColumn(
-                            "VALUE (M)", 
-                            format="Rp %.1fM", # Tambah Rp dan M (Miliar)
-                            width="medium"
-                        ),
-                        "ENTRY": st.column_config.NumberColumn(
-                            "ENTRY", 
-                            format="%d"
-                        ),
-                        "TP": st.column_config.NumberColumn(
-                            "TARGET", 
-                            format="%d"
-                        ),
-                        "CL": st.column_config.NumberColumn(
-                            "STOP LOSS", 
-                            format="%d"
-                        )
+                        "TICKER": st.column_config.TextColumn("Ticker"),
+                        "LAST": st.column_config.NumberColumn("Price", format="%d"),
+                        "CHG%": st.column_config.NumberColumn("Change", format="%.2f%%"),
+                        "VAL(M)": st.column_config.NumberColumn("Value (M)", format="Rp %.1fM"),
+                        "REKOMENDASI": st.column_config.TextColumn("Signal"),
+                        "ENTRY": st.column_config.NumberColumn("Entry"),
+                        "TP": st.column_config.NumberColumn("Target"),
+                        "CL": st.column_config.NumberColumn("Stop Loss")
                     }
                 )
             
-            with tab_mob: 
+            with tab_mob: # <--- SEJAJAR DENGAN 'with tab_desk' (12 spasi)
                 draw_mobile_cards(df)
 
             st.markdown("---")
