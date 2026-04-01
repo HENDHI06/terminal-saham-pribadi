@@ -233,37 +233,38 @@ def draw_mobile_cards(df):
 
 def run_scan(tickers, mode):
     results = []
-    status_ui = st.empty(); p_bar = st.progress(0)
-    for i in range(0, len(tickers), 30):
-        batch = tickers[i:i+30]
-        status_ui.caption(f"SCANNING: {i}/{len(tickers)}")
-        p_bar.progress(min(i / len(tickers), 1.0))
+    min_chg = 4.0 if mode == "Ketat" else 2.0
+    for t in tickers:
         try:
-            data = yf.download(batch, period="10d", interval="1d", group_by='ticker', progress=False, auto_adjust=True)
-            for t in batch:
-                try:
-                    df_t = data[t].dropna() if len(batch) > 1 else data.dropna()
-                    if len(df_t) < 6: continue
-                    df_t.columns = [c[0] if isinstance(c, tuple) else c for c in df_t.columns]
-                    last, prev = df_t.iloc[-1], df_t.iloc[-2]
-                    c_now, h_now = float(last['Close']), float(last['High'])
-                    vol, vol_avg5 = float(last['Volume']), df_t['Volume'].iloc[-6:-1].mean()
-                    vol_spike = vol > (vol_avg5 * 1.5)
-                    chg = ((c_now - float(prev['Close'])) / float(prev['Close'])) * 100
-                    val = c_now * vol
-                    if mode == "Ketat":
-                        cond = (val > 1_000_000_000 and 2.5 < chg < 12 and c_now >= (h_now * 0.985) and vol_spike)
-                    else:
-                        cond = (val > 200_000_000 and chg > 1.5 and vol_spike)
-                    if cond:
-                        results.append({
-                            "TICKER": t.replace(".JK",""), "LAST": int(c_now), "CHG%": round(chg, 2), 
-                            "VOL_S": "⚡ SPIKE" if vol_spike else "-", "ENTRY": f"{int(c_now)}-{int(c_now*1.01)}", 
-                            "TP": int(c_now*1.03), "CL": int(c_now*0.97), "VAL(M)": round(val/1_000_000, 1), "FULL": t
-                        })
-                except: continue
+            full_t = f"{t}.JK"
+            df = yf.download(full_t, period="35d", interval="1d", progress=False)
+            if df.empty or len(df) < 20: continue
+            
+            df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
+            c_now, c_prev = df['Close'].iloc[-1], df['Close'].iloc[-2]
+            chg = ((c_now - c_prev) / c_prev) * 100
+            
+            # --- FILTER VOLUME: WAJIB TRANSAKSI > 500 JUTA ---
+            avg_vol = df['Volume'].tail(5).mean()
+            val_tr = avg_vol * c_now
+            if val_tr < 500_000_000: continue 
+
+            # Indikator Strategi
+            ma20 = df['Close'].rolling(20).mean().iloc[-1]
+            # RSI Logic
+            delta = df['Close'].diff(); gain = (delta.where(delta > 0, 0)).rolling(14).mean(); loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+            rsi = 100 - (100 / (1 + (gain.iloc[-1]/loss.iloc[-1])))
+
+            # Penentuan Label Rekomendasi
+            sig = "🔎 WATCH"
+            if chg >= min_chg: sig = "🚀 BSJP"
+            elif c_now > ma20 and 45 < rsi < 70: sig = "💎 HOLD"
+
+            results.append({
+                "TICKER": t, "LAST": int(c_now), "CHG%": round(chg, 2),
+                "RSI": round(rsi, 1), "REKOMENDASI": sig, "FULL": full_t
+            })
         except: continue
-    status_ui.empty(); p_bar.empty()
     return pd.DataFrame(results)
 
 # --- 4. NAVIGATION ---
@@ -289,61 +290,92 @@ menu = st.sidebar.radio("COMMAND CENTER", menu_list)
 if st.sidebar.button("🔴 TERMINATE SESSION", width="stretch"):
     st.session_state["auth"] = {"logged_in": False}; st.rerun()
 
-# --- 5. CONTENT ---
+# --- 5. CONTENT AREA: STRATEGY SCANNER ---
 if menu == "STRATEGY SCANNER":
     st.title("🛰️ MARKET_INTELLIGENCE")
+    
+    # 1. Monitor IHSG
     try:
         ihsg_hist = yf.Ticker("^JKSE").history(period="2d")
         if len(ihsg_hist) >= 2:
-            prev_c, curr_c = ihsg_hist['Close'].iloc[-2], ihsg_hist['Close'].iloc[-1]
-            diff = curr_c - prev_c
+            curr_c = ihsg_hist['Close'].iloc[-1]
+            diff = curr_c - ihsg_hist['Close'].iloc[-2]
             clr = "#ccff00" if diff >= 0 else "#ff4b4b"
-            st.markdown(f"<div class='status-box' style='border-left-color:{clr} !important;'>IHSG: <span style='color:{clr}; font-weight:bold;'>{curr_c:,.2f} ({diff:+.2f})</span></div>", unsafe_allow_html=True)
+            st.markdown(f"""
+                <div style='border-left: 5px solid {clr}; padding:10px; background:rgba(255,255,255,0.05); margin-bottom:20px;'>
+                    IHSG: <span style='color:{clr}; font-weight:bold;'>{curr_c:,.2f} ({diff:+.2f})</span>
+                </div>
+            """, unsafe_allow_html=True)
     except: pass
 
+    # 2. Kontrol Scan & Sensitivity
     c_algo, c_sync = st.columns([4, 1])
-    with c_algo: mode_scan = st.radio("ALGO_SENSITIVITY", ["Ketat", "Agresif"], horizontal=True)
+    with c_algo: 
+        mode_scan = st.radio("ALGO_SENSITIVITY", ["Ketat", "Agresif"], horizontal=True)
     with c_sync:
-        if st.button("🔄 REFRESH PRICE", use_container_width=True):
-            if 'results' in st.session_state and not st.session_state.results.empty:
-                current_tickers = [f"{t}.JK" for t in st.session_state.results['TICKER']]
-                try:
-                    new_data = yf.download(current_tickers, period="1d", progress=False)['Close']
-                    for idx, row in st.session_state.results.iterrows():
-                        tk = f"{row['TICKER']}.JK"
-                        st.session_state.results.at[idx, 'LAST'] = int(new_data[tk].iloc[-1]) if len(current_tickers) > 1 else int(new_data.iloc[-1])
-                    st.session_state.scan_time = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%H:%M:%S")
-                except: pass
+        if st.button("🔄 REFRESH", use_container_width=True):
             st.rerun()
 
-    if st.button("⚡ EXECUTE_DEEP_SCAN", width="stretch"):
-        st.session_state.results = run_scan(load_tickers(), mode_scan)
-        st.session_state.scan_time = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%H:%M:%S")
+    if st.button("⚡ EXECUTE_DEEP_SCAN", use_container_width=True):
+        with st.spinner("🔍 Memindai 800+ Saham... Mohon Tunggu."):
+            # Pastikan fungsi run_scan kamu sudah versi terbaru dengan filter Volume & RSI
+            st.session_state.results = run_scan(load_tickers(), mode_scan)
+            st.session_state.scan_time = datetime.now().strftime("%H:%M:%S")
 
-    if 'results' in st.session_state:
+    # 3. Hasil Analisis (Dashboard & Tabel)
+    if 'results' in st.session_state and not st.session_state.results.empty:
         df = st.session_state.results
-        if not df.empty:
-            st.caption(f"Last Sync: {st.session_state.scan_time} WIB")
-            
-            # TAB VIEW FOR MOBILE OPTIMIZATION
-            tab_desk, tab_mob = st.tabs(["🖥️ DESKTOP VIEW", "📱 MOBILE VIEW"])
-            with tab_desk: st.dataframe(df.drop(columns=['FULL']), use_container_width=True, hide_index=True)
-            with tab_mob: draw_mobile_cards(df)
-            
-            sel_t = st.selectbox("FOCUS_TARGET", df['TICKER'].tolist())
-            full_t = df[df['TICKER'] == sel_t]['FULL'].values[0]
-            chart_data = yf.download(full_t, period="6mo", interval="1d", progress=False, auto_adjust=True)
-            chart_data.columns = [c[0] if isinstance(c, tuple) else c for c in chart_data.columns]
-            chart_data['MA20'] = chart_data['Close'].rolling(20).mean()
-            delta = chart_data['Close'].diff(); gain = (delta.where(delta > 0, 0)).rolling(14).mean(); loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
-            chart_data['RSI'] = 100 - (100 / (1 + (gain/loss)))
+        st.caption(f"Last Sync: {st.session_state.scan_time} WIB")
+        
+        # --- FITUR BARU: STRATEGY INSIGHT (METRICS) ---
+        st.markdown("### 🌟 STRATEGY_INSIGHT")
+        col_a, col_b = st.columns(2)
+        
+        with col_a:
+            st.markdown("<p style='color:#ccff00; font-weight:bold;'>🚀 TOP BSJP (SCALPING)</p>", unsafe_allow_html=True)
+            # Filter otomatis: Hanya yang berlabel BSJP & kenaikan tertinggi
+            df_bsjp = df[df['REKOMENDASI'].str.contains("BSJP", na=False)].sort_values(by='CHG%', ascending=False).head(3)
+            if not df_bsjp.empty:
+                m_cols = st.columns(len(df_bsjp))
+                for idx, (i, r) in enumerate(df_bsjp.iterrows()):
+                    m_cols[idx].metric(label=r['TICKER'], value=f"{int(r['LAST'])}", delta=f"{r['CHG%']}%")
+            else:
+                st.info("No BSJP signal found (Kriteria Belum Terpenuhi)")
 
-            fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_width=[0.2, 0.15, 0.65])
-            fig.add_trace(go.Candlestick(x=chart_data.index, open=chart_data['Open'], high=chart_data['High'], low=chart_data['Low'], close=chart_data['Close'], name="Price"), row=1, col=1)
-            fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['MA20'], line=dict(color='#ffcc00'), name="MA20"), row=1, col=1)
-            fig.add_trace(go.Bar(x=chart_data.index, y=chart_data['Volume'], name="Vol", opacity=0.4), row=2, col=1)
-            fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['RSI'], line=dict(color='#ff00ff'), name="RSI"), row=3, col=1)
-            fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=500, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+        with col_b:
+            st.markdown("<p style='color:#00ffff; font-weight:bold;'>💎 TOP HOLD (TREND SWING)</p>", unsafe_allow_html=True)
+            # Filter otomatis: Hanya yang berlabel HOLD & RSI paling optimal
+            df_hold = df[df['REKOMENDASI'].str.contains("HOLD", na=False)].sort_values(by='RSI', ascending=False).head(3)
+            if not df_hold.empty:
+                m_cols = st.columns(len(df_hold))
+                for idx, (i, r) in enumerate(df_hold.iterrows()):
+                    m_cols[idx].metric(label=r['TICKER'], value=f"{int(r['LAST'])}", delta=f"RSI: {r['RSI']}")
+            else:
+                st.info("No stable trend found.")
+        
+        st.markdown("---")
+
+        # 4. Tabel Tampilan (Desktop & Mobile)
+        tab_desk, tab_mob = st.tabs(["🖥️ DESKTOP VIEW", "📱 MOBILE VIEW"])
+        with tab_desk: 
+            st.dataframe(df.drop(columns=['FULL']), use_container_width=True, hide_index=True)
+        with tab_mob: 
+            draw_mobile_cards(df) # Pastikan fungsi ini ada di file kamu
+
+        # 5. Interactive Chart Analysis
+        st.markdown("### 📈 FOCUS_TARGET_ANALYSIS")
+        sel_t = st.selectbox("PILIH SAHAM UNTUK ANALISIS LANJUTAN", df['TICKER'].tolist())
+        full_t = df[df['TICKER'] == sel_t]['FULL'].values[0]
+        
+        c_data = yf.download(full_t, period="6mo", interval="1d", progress=False)
+        if not c_data.empty:
+            # Perbaikan Multi-Index Header
+            c_data.columns = [c[0] if isinstance(c, tuple) else c for c in c_data.columns]
+            
+            fig = go.Figure(data=[go.Candlestick(
+                x=c_data.index, open=c_data['Open'], high=c_data['High'], low=c_data['Low'], close=c_data['Close'], name="Price"
+            )])
+            fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=450, margin=dict(l=0, r=0, t=0, b=0))
             st.plotly_chart(fig, use_container_width=True)
 
 elif menu == "FUNDAMENTAL ANALYZER":
