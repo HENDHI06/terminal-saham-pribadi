@@ -122,72 +122,61 @@ init_db()
 
 import streamlit as st
 
-# --- FINAL CYBER 4K STYLING (SMOOTH & FIXED) ---
+# --- GLOBAL CYBER 4K STYLING (TEXTURED VERSION) ---
 st.markdown("""
     <style>
-    /* 1. ANIMASI BACKGROUND */
-    @keyframes moveGrid {
-        0% { background-position: 0 0; }
-        100% { background-position: 0 40px; }
-    }
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@400;900&display=swap');
 
-    /* 2. BACKGROUND UTAMA (Mencegah Double Layer) */
+    /* 1. BACKGROUND DENGAN TEKSTUR GRID & SCANLINES */
     .stApp {
-        background-color: #020617 !important;
-    }
-
-    /* 3. LAYER GRID KHUSUS (Dipasang di level terendah) */
-    [data-testid="stAppViewContainer"] {
+        background-color: #020617;
         background-image: 
-            linear-gradient(rgba(204, 255, 0, 0.07) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(0, 255, 255, 0.03) 1px, transparent 1px) !important;
-        background-size: 40px 40px !important;
-        animation: moveGrid 3s linear infinite !important;
+            linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
+            linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06)),
+            radial-gradient(circle at 50% 50%, #0d1117 0%, #020617 100%);
+        background-size: 100% 4px, 3px 100%, 100% 100%; /* Efek Scanline */
+        color: #e2e8f0;
+        font-family: 'Inter', sans-serif;
     }
 
-    /* 4. OVERLAY GRADIENT (Agar tidak terlalu silau & fokus ke tengah) */
-    [data-testid="stAppViewContainer"]::before {
+    /* 2. EFEK GRID HALUS */
+    .stApp::before {
         content: "";
-        position: fixed;
+        position: absolute;
         top: 0; left: 0; width: 100%; height: 100%;
-        background: radial-gradient(circle at center, transparent 0%, #020617 100%);
+        background-image: 
+            linear-gradient(rgba(204, 255, 0, 0.05) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(204, 255, 0, 0.05) 1px, transparent 1px);
+        background-size: 30px 30px;
         pointer-events: none;
         z-index: 0;
     }
 
-    /* 5. FIX KONTEN AGAR TIDAK DOUBLE/GHOSTING */
-    [data-testid="stVerticalBlock"] {
-        background: transparent !important;
+    /* 3. JUDUL NEON GLOW */
+    h1, h2, h3 {
+        font-family: 'Orbitron', sans-serif !important;
+        background: linear-gradient(90deg, #ccff00, #00ffff);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        filter: drop-shadow(0 0 12px rgba(204, 255, 0, 0.4));
     }
 
-    /* 6. STYLE FORM LOGIN (IDX Terminal) */
-    div[data-testid="stVerticalBlock"] > div:has(input) {
-        background: rgba(15, 23, 42, 0.85) !important;
-        backdrop-filter: blur(12px);
-        padding: 2rem;
-        border-radius: 15px;
-        border: 1px solid rgba(204, 255, 0, 0.3);
-        box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+    /* 4. GLASSMORPHISM BOX (TRANSPARAN TEBAL) */
+    div[data-testid="stForm"], div[data-testid="stMetric"], .stDataFrame, .stTabs {
+        background: rgba(15, 23, 42, 0.8) !important;
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(204, 255, 0, 0.2) !important;
+        border-radius: 15px !important;
+        box-shadow: 0 0 20px rgba(0,0,0,0.5) !important;
     }
 
-    /* 7. TYPOGRAPHY & BUTTON */
-    h1, h2, .stMarkdown p {
+    /* 5. INPUT FIELD DENGAN TEKS MENYALA */
+    .stTextInput input {
+        background-color: rgba(0, 0, 0, 0.7) !important;
+        border: 1px solid rgba(204, 255, 0, 0.4) !important;
         color: #ccff00 !important;
-        text-shadow: 0 0 10px rgba(204, 255, 0, 0.5);
-    }
-
-    .stButton>button {
-        background: #ccff00 !important;
-        color: #000 !important;
-        font-weight: bold !important;
-        border: none !important;
-        width: 100%;
-        transition: 0.3s;
-    }
-
-    .stButton>button:hover {
-        box-shadow: 0 0 20px #ccff00;
-        transform: scale(1.02);
+        font-family: 'JetBrains Mono', monospace;
+        text-shadow: 0 0 5px rgba(204, 255, 0, 0.5);
     }
     </style>
     """, unsafe_allow_html=True)
