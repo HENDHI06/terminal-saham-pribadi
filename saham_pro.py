@@ -196,13 +196,6 @@ st.markdown("""
 st.markdown("<h1 style='text-align: center;'>IDX</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; letter-spacing: 5px;'>CYBER TERMINAL PRO</p>", unsafe_allow_html=True)
 
-with st.container():
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.text_input("OPERATOR ID")
-        st.text_input("ACCESS KEY", type="password")
-        st.button("INITIATE SYSTEM")
-
 # --- 2. AUTHENTICATION (CLEAN & PRO VERSION) ---
 if "auth" not in st.session_state:
     st.session_state["auth"] = {"logged_in": False, "user": None, "role": None}
