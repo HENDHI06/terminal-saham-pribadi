@@ -239,33 +239,57 @@ def run_scan(tickers, mode):
         status_ui.caption(f"SCANNING: {i}/{len(tickers)}")
         p_bar.progress(min(i / len(tickers), 1.0))
         try:
-            data = yf.download(batch, period="10d", interval="1d", group_by='ticker', progress=False, auto_adjust=True)
+            # Kita pakai period 100d supaya MA100 bisa terhitung
+            data = yf.download(batch, period="100d", interval="1d", group_by='ticker', progress=False, auto_adjust=True)
             for t in batch:
                 try:
                     df_t = data[t].dropna() if len(batch) > 1 else data.dropna()
-                    if len(df_t) < 6: continue
+                    if len(df_t) < 50: continue
                     df_t.columns = [c[0] if isinstance(c, tuple) else c for c in df_t.columns]
+                    
+                    # --- INDIKATOR TREN ---
+                    last_close = df_t['Close']
+                    ma20 = last_close.rolling(20).mean().iloc[-1]
+                    ma50 = last_close.rolling(50).mean().iloc[-1]
+                    ma100 = last_close.rolling(100).mean().iloc[-1]
+
                     last, prev = df_t.iloc[-1], df_t.iloc[-2]
                     c_now, h_now = float(last['Close']), float(last['High'])
                     vol, vol_avg5 = float(last['Volume']), df_t['Volume'].iloc[-6:-1].mean()
-                    vol_spike = vol > (vol_avg5 * 1.5)
                     chg = ((c_now - float(prev['Close'])) / float(prev['Close'])) * 100
                     val = c_now * vol
+
+                    # --- LOGIKA KLASIFIKASI (BSJP vs HOLD) ---
+                    sig = "-"
+                    # Syarat BSJP: Harga tutup kuat di atas, naik > 4%, volume meledak
+                    if c_now >= (h_now * 0.98) and chg > 4 and vol > (vol_avg5 * 1.5):
+                        sig = "🚀 BSJP"
+                    # Syarat HOLD: Susunan MA rapi (Uptrend)
+                    elif c_now > ma50 and ma20 > ma50 and ma50 > ma100:
+                        sig = "💎 HOLD"
+
+                    # --- FILTER MODE ---
                     if mode == "Ketat":
-                        cond = (val > 1_000_000_000 and 2.5 < chg < 12 and c_now >= (h_now * 0.985) and vol_spike)
+                        cond = (val > 1_500_000_000 and chg > 2 and sig != "-")
                     else:
-                        cond = (val > 200_000_000 and chg > 1.5 and vol_spike)
+                        cond = (val > 300_000_000 and chg > 1 and sig != "-")
+
                     if cond:
                         results.append({
-                            "TICKER": t.replace(".JK",""), "LAST": int(c_now), "CHG%": round(chg, 2), 
-                            "VOL_S": "⚡ SPIKE" if vol_spike else "-", "ENTRY": f"{int(c_now)}-{int(c_now*1.01)}", 
-                            "TP": int(c_now*1.03), "CL": int(c_now*0.97), "VAL(M)": round(val/1_000_000, 1), "FULL": t
+                            "TICKER": t.replace(".JK",""), 
+                            "LAST": int(c_now), 
+                            "CHG%": round(chg, 2), 
+                            "REKOMENDASI": sig, 
+                            "VAL(M)": round(val/1_000_000, 1), 
+                            "ENTRY": int(c_now), 
+                            "TP": int(c_now*1.03) if sig=="🚀 BSJP" else int(c_now*1.15),
+                            "CL": int(c_now*0.97) if sig=="🚀 BSJP" else int(ma50), 
+                            "FULL": t
                         })
                 except: continue
         except: continue
     status_ui.empty(); p_bar.empty()
     return pd.DataFrame(results)
-
 # --- 4. NAVIGATION ---
 role = st.session_state["auth"]["role"]
 user_now = st.session_state["auth"]["user"]
@@ -818,4 +842,35 @@ elif menu == "SECURITY SETTINGS":
         new_p = st.text_input("NEW ACCESS KEY", type="password")
         if st.form_submit_button("UPDATE"):
             if update_password_db(user_now, new_p): st.success("Updated")
+
+# ... kode menu-menu sebelumnya ...
+
+elif menu == "SECURITY SETTINGS":
+    st.title("🔐 SECURITY_PROTOCOL")
+    # (isi kode security settings Anda)
+
+# --- TAMBAHKAN DI SINI ---
+elif menu == "FUNDAMENTAL ANALYZER":
+    st.title("📊 FUNDAMENTAL_INTELLIGENCE")
+    t_input = st.text_input("INPUT TICKER", "BBCA").upper()
+    if st.button("RUN ANALYSIS"):
+        try:
+            with st.spinner("FETCHING DATA..."):
+                stock = yf.Ticker(f"{t_input}.JK")
+                info = stock.info
+                
+                # Menampilkan Nama Perusahaan agar lebih informatif
+                st.subheader(info.get('longName', t_input))
+                
+                c1, c2, c3 = st.columns(3)
+                c1.metric("PBV", f"{info.get('priceToBook', 0):.2f}x")
+                c2.metric("PER", f"{info.get('trailingPE', 0):.2f}x")
+                
+                # ROE biasanya dalam desimal, jadi dikali 100 untuk persen
+                roe = info.get('returnOnEquity', 0)
+                c3.metric("ROE", f"{roe*100:.2f}%" if roe else "N/A")
+                
+                st.success(f"Data fundamental {t_input} berhasil ditarik.")
+        except Exception as e:
+            st.error(f"Gagal mengambil data: {e}")
 
