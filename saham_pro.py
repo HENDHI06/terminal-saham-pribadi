@@ -77,53 +77,15 @@ def add_to_portfolio(u, t, p, l, tp, cl):
               (u, t.upper().strip(), p, l, tp, cl, datetime.now().strftime("%Y-%m-%d")))
     conn.commit(); conn.close()
 
-with sqlite3.connect('users.db') as conn:
-    try:
-        conn.execute("ALTER TABLE history ADD COLUMN lots INTEGER")
-        conn.execute("ALTER TABLE history ADD COLUMN profit REAL")
-    except:
-        pass # Jika kolom sudah ada, abaikan saja
-
-def sell_position(user_id, portfolio_id, ticker, buy_price, sell_price, sell_qty, current_lots):
-    import sqlite3
-    from datetime import datetime
-    
-    with sqlite3.connect('users.db') as conn:
-        cursor = conn.cursor()
-        
-        # 1. Pastikan tabel history ada (Mencegah OperationalError)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id TEXT,
-                ticker TEXT,
-                buy_price REAL,
-                sell_price REAL,
-                lots INTEGER,
-                profit REAL,
-                date TEXT
-            )
-        """)
-        
-        # 2. Hitung Profit (Selisih x Lot x 100)
-        profit = (sell_price - buy_price) * sell_qty * 100
-        date_sell = datetime.now().strftime("%Y-%m-%d %H:%M")
-        
-        # 3. Insert ke History
-        cursor.execute("""
-            INSERT INTO history (user_id, ticker, buy_price, sell_price, lots, profit, date) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (user_id, ticker, buy_price, sell_price, sell_qty, profit, date_sell))
-        
-        # 4. Update atau Hapus di tabel Portfolio
-        if sell_qty < current_lots:
-            # JUAL SEBAGIAN: Kurangi jumlah lot
-            cursor.execute("UPDATE portfolio SET lots = lots - ? WHERE id = ?", (sell_qty, portfolio_id))
-        else:
-            # JUAL SEMUA: Hapus baris
-            cursor.execute("DELETE FROM portfolio WHERE id = ?", (portfolio_id,))
-        
-        conn.commit()
+def sell_position(u, row_id, ticker, buy_p, sell_p, lots):
+    pnl = (sell_p - buy_p) * lots * 100
+    date_now = datetime.now().strftime("%Y-%m-%d")
+    conn = sqlite3.connect('users.db')
+    c = conn.cursor()
+    c.execute("INSERT INTO history (username, ticker, buy_price, sell_price, lots, pnl, date) VALUES (?, ?, ?, ?, ?, ?, ?)",
+              (u, ticker, buy_p, sell_p, lots, pnl, date_now))
+    c.execute("DELETE FROM portfolio WHERE id=?", (row_id,))
+    conn.commit(); conn.close()
 
 def get_user_portfolio(u, r):
     conn = sqlite3.connect('users.db')
@@ -158,168 +120,78 @@ def update_password_db(u, new_p):
 
 init_db()
 
-import streamlit as st
-
-# --- TARUH DI ATAS, DI LUAR SEMUA LOOP ---
-def sell_position(user_id, portfolio_id, ticker, buy_price, sell_price, sell_qty, current_lots):
-    import sqlite3
-    from datetime import datetime
-    
-    with sqlite3.connect('users.db') as conn:
-        cursor = conn.cursor()
-        # Buat tabel history baru
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS history_v3 (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id TEXT, ticker TEXT, buy_price REAL,
-                sell_price REAL, lots INTEGER, profit REAL, date TEXT
-            )
-        """)
-        
-        profit = (float(sell_price) - float(buy_price)) * int(sell_qty) * 100
-        date_sell = datetime.now().strftime("%Y-%m-%d %H:%M")
-        
-        cursor.execute("""
-            INSERT INTO history_v3 (user_id, ticker, buy_price, sell_price, lots, profit, date) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (user_id, ticker, buy_price, sell_price, int(sell_qty), profit, date_sell))
-        
-        if int(sell_qty) < int(current_lots):
-            cursor.execute("UPDATE portfolio SET lots = lots - ? WHERE id = ?", (int(sell_qty), portfolio_id))
-        else:
-            cursor.execute("DELETE FROM portfolio WHERE id = ?", (portfolio_id,))
-        conn.commit()
-
-# --- GLOBAL CYBER 4K STYLING (TEXTURED VERSION) ---
+# --- 1. PRO CYBER STYLING (FIXED SIDEBAR BUTTON) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@400;900&display=swap');
+    
+    [data-testid="stHeaderActionElements"], .stDeployButton, #MainMenu {
+        display: none !important;
+    }
+    
+    header { background-color: transparent !important; }
 
-    /* 1. BACKGROUND DENGAN TEKSTUR GRID & SCANLINES */
     .stApp {
-        background-color: #020617;
+        background-color: #05070a;
         background-image: 
-            linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
-            linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06)),
-            radial-gradient(circle at 50% 50%, #0d1117 0%, #020617 100%);
-        background-size: 100% 4px, 3px 100%, 100% 100%; /* Efek Scanline */
-        color: #e2e8f0;
-        font-family: 'Inter', sans-serif;
-    }
-
-    /* 2. EFEK GRID HALUS */
-    .stApp::before {
-        content: "";
-        position: absolute;
-        top: 0; left: 0; width: 100%; height: 100%;
-        background-image: 
+            linear-gradient(rgba(204, 255, 0, 0.02) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(204, 255, 0, 0.02) 1px, transparent 1px),
             linear-gradient(rgba(204, 255, 0, 0.05) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(204, 255, 0, 0.05) 1px, transparent 1px);
-        background-size: 30px 30px;
-        pointer-events: none;
-        z-index: 0;
+            linear-gradient(90deg, rgba(204, 255, 0, 0.05) 1px, transparent 1px),
+            radial-gradient(circle at center, rgba(10, 25, 47, 0.4), #05070a);
+        background-size: 20px 20px, 20px 20px, 100px 100px, 100px 100px, 100% 100%;
+        font-family: 'JetBrains Mono', monospace;
+        color: #e0e0e0;
     }
 
-    /* 3. JUDUL NEON GLOW */
-    h1, h2, h3 {
-        font-family: 'Orbitron', sans-serif !important;
+    div[data-testid="stMetric"], .status-box, .stDataFrame, div[data-testid="stExpander"], .stTabs, .stForm {
+        background: rgba(0, 10, 20, 0.5) !important;
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(204, 255, 0, 0.15) !important;
+        border-radius: 10px !important;
+    }
+
+    h1 {
+        font-family: 'Orbitron', sans-serif;
         background: linear-gradient(90deg, #ccff00, #00ffff);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        filter: drop-shadow(0 0 12px rgba(204, 255, 0, 0.4));
     }
 
-    /* 4. GLASSMORPHISM BOX (TRANSPARAN TEBAL) */
-    div[data-testid="stForm"], div[data-testid="stMetric"], .stDataFrame, .stTabs {
-        background: rgba(15, 23, 42, 0.8) !important;
-        backdrop-filter: blur(20px);
-        border: 1px solid rgba(204, 255, 0, 0.2) !important;
-        border-radius: 15px !important;
-        box-shadow: 0 0 20px rgba(0,0,0,0.5) !important;
-    }
+    button[kind="header"] { color: #ccff00 !important; }
 
-    /* 5. INPUT FIELD DENGAN TEKS MENYALA */
-    .stTextInput input {
-        background-color: rgba(0, 0, 0, 0.7) !important;
-        border: 1px solid rgba(204, 255, 0, 0.4) !important;
+    /* Tabs Styling */
+    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
+    .stTabs [data-baseweb="tab"] {
+        background-color: rgba(204, 255, 0, 0.05) !important;
+        border-radius: 5px 5px 0px 0px;
+        color: #888 !important;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: rgba(204, 255, 0, 0.15) !important;
         color: #ccff00 !important;
-        font-family: 'JetBrains Mono', monospace;
-        text-shadow: 0 0 5px rgba(204, 255, 0, 0.5);
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. AUTHENTICATION (CLEAN & PRO VERSION) ---
+# --- 2. AUTHENTICATION ---
 if "auth" not in st.session_state:
     st.session_state["auth"] = {"logged_in": False, "user": None, "role": None}
 
 if not st.session_state["auth"]["logged_in"]:
-    # Tampilan Header 4K
-    st.markdown("""
-        <div style="text-align: center; margin-top: 50px; margin-bottom: 30px;">
-            <h1 style="font-size: 4.5rem; margin-bottom: 0; font-family: 'Orbitron', sans-serif;">IDX</h1>
-            <p style="color: #64748b; letter-spacing: 10px; font-size: 0.7rem; font-weight: 300;">CYBER_TERMINAL_PRO</p>
-            <div style="height: 2px; width: 80px; background: #ccff00; margin: 15px auto; box-shadow: 0 0 15px #ccff00;"></div>
-        </div>
-    """, unsafe_allow_html=True)
-
-    # Box Login simetris di tengah
-    _, col2, _ = st.columns([1, 1.2, 1])
+    _, col2, _ = st.columns([1,1.5,1])
     with col2:
-        # Gunakan form agar input tidak refresh setiap ngetik satu huruf
-        with st.form("login_form", clear_on_submit=False):
-            u = st.text_input("OPERATOR ID").strip()
-            p = st.text_input("ACCESS KEY", type="password")
-            submit = st.form_submit_button("AUTHORIZE ACCESS", use_container_width=True)
-            
-            if submit:
-                if u and p:
-                    # Ganti 'check_login_db' dengan nama fungsi login kamu yang asli jika berbeda
-                    role = check_login_db(u, p)
-                    if role:
-                        update_login_info(u)
-                        st.session_state["auth"] = {"logged_in": True, "user": u, "role": role}
-                        st.success("ACCESS GRANTED. INITIALIZING...")
-                        st.rerun()
-                    else:
-                        st.error("❌ ACCESS DENIED")
-                else:
-                    st.warning("PLEASE ENTER CREDENTIALS")
-    
-    st.stop() # Menahan agar konten dashboard tidak muncul sebelum loginTrue)
-
-    # LANJUTKAN DENGAN FORM LOGIN KAMU:
-    _, col2, _ = st.columns([1, 1.2, 1])
-    with col2:
+        st.markdown("<div style='text-align:center; padding:50px 0;'><h1 style='font-size:3rem; margin-bottom:0;'>IDX</h1><p style='color:#888; letter-spacing:5px;'>CYBER TERMINAL</p></div>", unsafe_allow_html=True)
         with st.form("login_form"):
             u = st.text_input("OPERATOR ID").strip()
             p = st.text_input("ACCESS KEY", type="password")
-            if st.form_submit_button("AUTHORIZE ACCESS", use_container_width=True):
-                # ... (Logika login kamu tetap sama) ...
-                pass
-    st.stop()
-
-    # 2. BOX LOGIN (Gunakan kolom agar berada di tengah)
-    _, col2, _ = st.columns([1, 1.2, 1]) # Perlebar sedikit col2 agar nyaman
-    with col2:
-        with st.form("login_form"):
-            # Gunakan label uppercase agar senada dengan tema terminal
-            u = st.text_input("OPERATOR ID").strip()
-            p = st.text_input("ACCESS KEY", type="password")
-            
-            # Submit button
-            if st.form_submit_button("AUTHORIZE ACCESS", use_container_width=True):
+            if st.form_submit_button("AUTHORIZE ACCESS", width="stretch"):
                 role = check_login_db(u, p)
                 if role:
                     update_login_info(u)
                     st.session_state["auth"] = {"logged_in": True, "user": u, "role": role}
                     st.rerun()
-                else: 
-                    st.error("❌ ACCESS DENIED: INVALID CREDENTIALS")
-    
-    # Tambahkan footer kecil di bawah box login (Opsional)
-    st.markdown("<p style='text-align:center; color:#1e293b; font-size:0.6rem; margin-top:50px;'>SECURE ENCRYPTED CONNECTION ENABLED</p>", unsafe_allow_html=True)
-    
+                else: st.error("ACCESS DENIED")
     st.stop()
 
 # --- 3. DATA ENGINE & MOBILE OPTIMIZATION ---
@@ -340,34 +212,21 @@ def load_tickers():
     except: return []
 
 def draw_mobile_cards(df):
-    if df.empty:
-        st.warning("No data available for Mobile View.")
-        return
-
     for _, row in df.iterrows():
-        # Penentuan Warna Berdasarkan Perubahan Harga
-        chg_val = row.get('CHG%', 0)
-        chg_color = "#ccff00" if chg_val > 0 else "#ff4b4b"
-        
-        # Penentuan Label dan Warna Signal
-        sig_label = row.get('REKOMENDASI', 'N/A')
-        sig_color = "#ccff00" if "BSJP" in sig_label else "#00ffff"
-        
+        chg_color = "#ccff00" if row['CHG%'] > 0 else "#ff4b4b"
         st.markdown(f"""
-        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); 
-                    border-left: 4px solid {chg_color}; border-radius: 10px; padding: 12px; margin-bottom: 10px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                <span style="font-size: 1.1rem; font-weight: 800; color: #fff;">{row['TICKER']}</span>
-                <span style="background: {sig_color}22; color: {sig_color}; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; border: 1px solid {sig_color}44;">
-                    {sig_label}
-                </span>
+        <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(204, 255, 0, 0.2); 
+                    border-radius: 12px; padding: 15px; margin-bottom: 12px; border-left: 5px solid {chg_color};">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <b style="font-size: 1.2rem; color: #ccff00;">{row['TICKER']}</b>
+                <span style="color: {chg_color}; font-weight: bold;">{row['CHG%']}% {row['VOL_S']}</span>
             </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.85rem;">
-                <div style="color: #888;">Price: <b style="color: #fff;">{int(row['LAST'])}</b> <span style="color: {chg_color};">({chg_val}%)</span></div>
-                <div style="color: #888;">Value: <b style="color: #fff;">{row['VAL(M)']}M</b></div>
-                <div style="color: #888;">Entry: <b style="color: #00ffff;">{int(row['ENTRY'])}</b></div>
-                <div style="color: #888;">Target: <b style="color: #ccff00;">{int(row['TP'])}</b></div>
-                <div style="color: #888;">Stop Loss: <b style="color: #ff4b4b;">{int(row['CL'])}</b></div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; font-size: 0.85rem; color: #bbb;">
+                <div>Last: <b style="color:#fff;">{row['LAST']}</b></div>
+                <div>Value: <b style="color:#fff;">{row['VAL(M)']}M</b></div>
+                <div style="color: #00ffff;">Entry: {row['ENTRY']}</div>
+                <div style="color: #00ff00;">TP: {row['TP']}</div>
+                <div style="color: #ff4b4b;">CL: {row['CL']}</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -380,57 +239,33 @@ def run_scan(tickers, mode):
         status_ui.caption(f"SCANNING: {i}/{len(tickers)}")
         p_bar.progress(min(i / len(tickers), 1.0))
         try:
-            # Kita pakai period 100d supaya MA100 bisa terhitung
-            data = yf.download(batch, period="100d", interval="1d", group_by='ticker', progress=False, auto_adjust=True)
+            data = yf.download(batch, period="10d", interval="1d", group_by='ticker', progress=False, auto_adjust=True)
             for t in batch:
                 try:
                     df_t = data[t].dropna() if len(batch) > 1 else data.dropna()
-                    if len(df_t) < 50: continue
+                    if len(df_t) < 6: continue
                     df_t.columns = [c[0] if isinstance(c, tuple) else c for c in df_t.columns]
-                    
-                    # --- INDIKATOR TREN ---
-                    last_close = df_t['Close']
-                    ma20 = last_close.rolling(20).mean().iloc[-1]
-                    ma50 = last_close.rolling(50).mean().iloc[-1]
-                    ma100 = last_close.rolling(100).mean().iloc[-1]
-
                     last, prev = df_t.iloc[-1], df_t.iloc[-2]
                     c_now, h_now = float(last['Close']), float(last['High'])
                     vol, vol_avg5 = float(last['Volume']), df_t['Volume'].iloc[-6:-1].mean()
+                    vol_spike = vol > (vol_avg5 * 1.5)
                     chg = ((c_now - float(prev['Close'])) / float(prev['Close'])) * 100
                     val = c_now * vol
-
-                    # --- LOGIKA KLASIFIKASI (BSJP vs HOLD) ---
-                    sig = "-"
-                    # Syarat BSJP: Harga tutup kuat di atas, naik > 4%, volume meledak
-                    if c_now >= (h_now * 0.98) and chg > 4 and vol > (vol_avg5 * 1.5):
-                        sig = "🚀 BSJP"
-                    # Syarat HOLD: Susunan MA rapi (Uptrend)
-                    elif c_now > ma50 and ma20 > ma50 and ma50 > ma100:
-                        sig = "💎 HOLD"
-
-                    # --- FILTER MODE ---
                     if mode == "Ketat":
-                        cond = (val > 1_500_000_000 and chg > 2 and sig != "-")
+                        cond = (val > 1_000_000_000 and 2.5 < chg < 12 and c_now >= (h_now * 0.985) and vol_spike)
                     else:
-                        cond = (val > 300_000_000 and chg > 1 and sig != "-")
-
+                        cond = (val > 200_000_000 and chg > 1.5 and vol_spike)
                     if cond:
                         results.append({
-                            "TICKER": t.replace(".JK",""), 
-                            "LAST": int(c_now), 
-                            "CHG%": round(chg, 2), 
-                            "REKOMENDASI": sig, 
-                            "VAL(M)": round(val/1_000_000, 1), 
-                            "ENTRY": int(c_now), 
-                            "TP": int(c_now*1.03) if sig=="🚀 BSJP" else int(c_now*1.15),
-                            "CL": int(c_now*0.97) if sig=="🚀 BSJP" else int(ma50), 
-                            "FULL": t
+                            "TICKER": t.replace(".JK",""), "LAST": int(c_now), "CHG%": round(chg, 2), 
+                            "VOL_S": "⚡ SPIKE" if vol_spike else "-", "ENTRY": f"{int(c_now)}-{int(c_now*1.01)}", 
+                            "TP": int(c_now*1.03), "CL": int(c_now*0.97), "VAL(M)": round(val/1_000_000, 1), "FULL": t
                         })
                 except: continue
         except: continue
     status_ui.empty(); p_bar.empty()
     return pd.DataFrame(results)
+
 # --- 4. NAVIGATION ---
 role = st.session_state["auth"]["role"]
 user_now = st.session_state["auth"]["user"]
@@ -481,99 +316,34 @@ if menu == "STRATEGY SCANNER":
                 except: pass
             st.rerun()
 
-    # 1. TOMBOL EKSEKUSI
     if st.button("⚡ EXECUTE_DEEP_SCAN", width="stretch"):
         st.session_state.results = run_scan(load_tickers(), mode_scan)
         st.session_state.scan_time = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%H:%M:%S")
 
-    # 2. TAMPILKAN HASIL (Satu blok tunggal agar tidak double)
-    # 2. TAMPILKAN HASIL (Versi Fix NameError & Pro Look)
     if 'results' in st.session_state:
         df = st.session_state.results
         if not df.empty:
             st.caption(f"Last Sync: {st.session_state.scan_time} WIB")
             
-            # --- 1. TOP PICKS SECTION ---
-            st.markdown("### 🌟 ANALYTICS_INSIGHT")
-            col_a, col_b = st.columns(2)
+            # TAB VIEW FOR MOBILE OPTIMIZATION
+            tab_desk, tab_mob = st.tabs(["🖥️ DESKTOP VIEW", "📱 MOBILE VIEW"])
+            with tab_desk: st.dataframe(df.drop(columns=['FULL']), use_container_width=True, hide_index=True)
+            with tab_mob: draw_mobile_cards(df)
             
-            with col_a:
-                st.markdown("<p style='color:#ccff00; font-weight:bold; margin-bottom:5px;'>🔥 TOP BSJP SCALPING</p>", unsafe_allow_html=True)
-                top_bsjp = df[df['REKOMENDASI'] == "🚀 BSJP"].head(2)
-                if not top_bsjp.empty:
-                    for _, r in top_bsjp.iterrows():
-                        st.metric(label=r['TICKER'], value=int(r['LAST']), delta=f"{r['CHG%']}%")
-                else:
-                    st.caption("No BSJP signal.")
-
-            with col_b:
-                st.markdown("<p style='color:#00ffff; font-weight:bold; margin-bottom:5px;'>🏆 TOP HOLD TREND</p>", unsafe_allow_html=True)
-                top_hold = df[df['REKOMENDASI'] == "💎 HOLD"].head(2)
-                if not top_hold.empty:
-                    for _, r in top_hold.iterrows():
-                        st.metric(label=r['TICKER'], value=int(r['LAST']), delta=f"{r['CHG%']}%", delta_color="normal")
-                else:
-                    st.caption("No HOLD trend.")
-            
-            st.markdown("---")
-            
-# 2. TAMPILKAN HASIL (Indentasi 4 spasi dari 'if menu')
-    if 'results' in st.session_state:
-        df = st.session_state.results # (8 spasi)
-        if not df.empty: # (8 spasi)
-            st.caption(f"Last Sync: {st.session_state.scan_time} WIB") # (12 spasi)
-            
-            # --- BAGIAN TABEL (DEFINISI TAB) ---
-            tab_desk, tab_mob = st.tabs(["🖥️ DESKTOP VIEW", "📱 MOBILE VIEW"]) # (12 spasi)
-            
-            with tab_desk: # <--- PASTIKAN BARIS INI SEJAJAR DENGAN 'tab_desk, tab_mob' di atas (12 spasi)
-                st.dataframe( # (16 spasi)
-                    df.drop(columns=['FULL']), 
-                    use_container_width=True, 
-                    hide_index=True,
-                    column_config={
-                        "TICKER": st.column_config.TextColumn("Ticker"),
-                        "LAST": st.column_config.NumberColumn("Price", format="%d"),
-                        "CHG%": st.column_config.NumberColumn("Change", format="%.2f%%"),
-                        "VAL(M)": st.column_config.NumberColumn("Value (M)", format="Rp %.1fM"),
-                        "REKOMENDASI": st.column_config.TextColumn("Signal"),
-                        "ENTRY": st.column_config.NumberColumn("Entry"),
-                        "TP": st.column_config.NumberColumn("Target"),
-                        "CL": st.column_config.NumberColumn("Stop Loss")
-                    }
-                )
-
-            with tab_mob: 
-                draw_mobile_cards(df)
-                
-            st.markdown("---")
-            # --- 3. LANJUT KE BAGIAN CHART ---
-            st.markdown("### 📈 FOCUS_ANALYSIS")
-            
-            # --- BAGIAN CHART (FOCUS TARGET) ---
-            st.markdown("### 📈 FOCUS_TARGET_ANALYSIS")
-            sel_t = st.selectbox("SELECT TICKER FOR CHART", df['TICKER'].tolist())
+            sel_t = st.selectbox("FOCUS_TARGET", df['TICKER'].tolist())
             full_t = df[df['TICKER'] == sel_t]['FULL'].values[0]
-            
-            # Download data chart
             chart_data = yf.download(full_t, period="6mo", interval="1d", progress=False, auto_adjust=True)
             chart_data.columns = [c[0] if isinstance(c, tuple) else c for c in chart_data.columns]
-            
-            # Tambahkan Indikator MA & RSI untuk Chart Detail
             chart_data['MA20'] = chart_data['Close'].rolling(20).mean()
-            delta = chart_data['Close'].diff()
-            gain = (delta.where(delta > 0, 0)).rolling(14).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+            delta = chart_data['Close'].diff(); gain = (delta.where(delta > 0, 0)).rolling(14).mean(); loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
             chart_data['RSI'] = 100 - (100 / (1 + (gain/loss)))
 
-            # Gambar Chart Plotly
             fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_width=[0.2, 0.15, 0.65])
             fig.add_trace(go.Candlestick(x=chart_data.index, open=chart_data['Open'], high=chart_data['High'], low=chart_data['Low'], close=chart_data['Close'], name="Price"), row=1, col=1)
             fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['MA20'], line=dict(color='#ffcc00'), name="MA20"), row=1, col=1)
             fig.add_trace(go.Bar(x=chart_data.index, y=chart_data['Volume'], name="Vol", opacity=0.4), row=2, col=1)
             fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['RSI'], line=dict(color='#ff00ff'), name="RSI"), row=3, col=1)
-            
-            fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=600, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=500, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
             st.plotly_chart(fig, use_container_width=True)
 
 elif menu == "FUNDAMENTAL ANALYZER":
@@ -973,94 +743,21 @@ elif menu == "MONEY MANAGEMENT":
                     df_display[col] = "*****"
             
             st.dataframe(df_display.drop(columns=['username','tp_price','cl_price']), use_container_width=True, hide_index=True)
-
-        # --- TARUH DI DALAM LOOP PORTFOLIO ---
-# Tombol Eksekusi Jual
-btn_label = f"🚀 SELL {s_qty} LOT" if s_qty < row['lots'] else f"🔥 CLOSE POSITION"
-
-if st.button(btn_label, key=f"btn_sell_{row['id']}", use_container_width=True):
-    # Kita hanya memanggil fungsinya saja di sini
-    sell_position(user_now, row['id'], row['ticker'], row['buy_price'], s_price, s_qty, row['lots'])
-    st.success(f"Berhasil Menjual {s_qty} Lot {row['ticker']}")
-    st.rerun()
             
             # Tombol Jual
-            # Loop Tampilan Portfolio
-        for i, row in df_p.iterrows():
-            with st.expander(f"📦 MANAGE {row['ticker']} ({row['lots']} Lot)"):
-                # Baris Input
-                c1, c2, c3 = st.columns([2, 2, 0.5])
-                
-                # Input Harga Jual
-                s_p = c1.number_input("Harga Jual", value=float(row['Live']), key=f"sp_{row['id']}")
-                
-                # Input Jumlah Lot yang mau dijual
-                s_q = c2.number_input("Lot Dijual", min_value=1, max_value=int(row['lots']), value=int(row['lots']), key=f"sq_{row['id']}")
-                
-                # Tombol Hapus Data Manual
-                if c3.button("🗑️", key=f"del_{row['id']}"):
-                    with sqlite3.connect('users.db') as conn:
-                        conn.execute("DELETE FROM portfolio WHERE id=?", (row['id'],))
-                    st.rerun()
-
-                # Tombol Eksekusi
-                if st.button(f"🚀 JUAL {s_q} LOT {row['ticker']}", key=f"btn_{row['id']}", use_container_width=True):
-                    # Panggil fungsi yang kita buat di atas
-                    sell_position(user_now, row['id'], row['ticker'], row['buy_price'], s_p, s_q, row['lots'])
-                    st.success(f"Berhasil! {s_q} Lot {row['ticker']} terjual.")
-                    st.rerun()
-                
-                # Tombol Hapus (Icon Sampah)
-                if c3.button("🗑️", key=f"btn_del_port_{row['id']}", use_container_width=True):
-                    with sqlite3.connect('users.db') as conn:
-                        conn.execute("DELETE FROM portfolio WHERE id=?", (row['id'],))
-                    st.rerun()
-
-                # Tombol Eksekusi Jual
-                btn_label = f"🚀 SELL {s_qty} LOT" if s_qty < row['lots'] else f"🔥 CLOSE POSITION"
-                if st.button(btn_label, key=f"btn_sell_{row['id']}", use_container_width=True):
-                    # Memanggil fungsi yang sudah diupdate di atas
-                    def sell_position(user_id, portfolio_id, ticker, buy_price, sell_price, sell_qty, current_lots):
-    import sqlite3
-    from datetime import datetime
-    
-    # Gunakan nama tabel baru 'history_v3' untuk menghindari error kolom yang lama
-    with sqlite3.connect('users.db') as conn:
-        cursor = conn.cursor()
-        
-        # Buat tabel baru yang pasti punya kolom 'lots' dan 'profit'
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS history_v3 (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id TEXT,
-                ticker TEXT,
-                buy_price REAL,
-                sell_price REAL,
-                lots INTEGER,
-                profit REAL,
-                date TEXT
-            )
-        """)
-        
-        # Kalkulasi P/L
-        profit = (float(sell_price) - float(buy_price)) * int(sell_qty) * 100
-        date_sell = datetime.now().strftime("%Y-%m-%d %H:%M")
-        
-        # Simpan ke history baru
-        cursor.execute("""
-            INSERT INTO history_v3 (user_id, ticker, buy_price, sell_price, lots, profit, date) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (user_id, ticker, buy_price, sell_price, int(sell_qty), profit, date_sell))
-        
-        # LOGIKA POTONG LOT:
-        if int(sell_qty) < int(current_lots):
-            # Jika jual sebagian, kurangi angka di kolom lots
-            cursor.execute("UPDATE portfolio SET lots = lots - ? WHERE id = ?", (int(sell_qty), portfolio_id))
+            for i, row in df_p.iterrows():
+                with st.expander(f"MANAGE {row['ticker']}"):
+                    cs, cd = st.columns([3, 1])
+                    s_price = cs.number_input(f"Harga Jual {row['ticker']}", value=float(row['Live']), key=f"sell_val_{row['id']}")
+                    if cs.button(f"🚀 SELL {row['ticker']}", key=f"btn_sell_{row['id']}", use_container_width=True):
+                        sell_position(user_now, row['id'], row['ticker'], row['buy_price'], s_price, row['lots'])
+                        st.rerun()
+                    if cd.button("🗑️", key=f"btn_del_port_{row['id']}", use_container_width=True):
+                        with sqlite3.connect('users.db') as conn:
+                            conn.execute("DELETE FROM portfolio WHERE id=?", (row['id'],))
+                        st.rerun()
         else:
-            # Jika jual semua, hapus barisnya
-            cursor.execute("DELETE FROM portfolio WHERE id = ?", (portfolio_id,))
-        
-        conn.commit()
+            st.info("Portfolio kosong.")
 
     # --- TAB 2: TRADING HISTORY ---
     with tab2:
@@ -1121,35 +818,4 @@ elif menu == "SECURITY SETTINGS":
         new_p = st.text_input("NEW ACCESS KEY", type="password")
         if st.form_submit_button("UPDATE"):
             if update_password_db(user_now, new_p): st.success("Updated")
-
-# ... kode menu-menu sebelumnya ...
-
-elif menu == "SECURITY SETTINGS":
-    st.title("🔐 SECURITY_PROTOCOL")
-    # (isi kode security settings Anda)
-
-# --- TAMBAHKAN DI SINI ---
-elif menu == "FUNDAMENTAL ANALYZER":
-    st.title("📊 FUNDAMENTAL_INTELLIGENCE")
-    t_input = st.text_input("INPUT TICKER", "BBCA").upper()
-    if st.button("RUN ANALYSIS"):
-        try:
-            with st.spinner("FETCHING DATA..."):
-                stock = yf.Ticker(f"{t_input}.JK")
-                info = stock.info
-                
-                # Menampilkan Nama Perusahaan agar lebih informatif
-                st.subheader(info.get('longName', t_input))
-                
-                c1, c2, c3 = st.columns(3)
-                c1.metric("PBV", f"{info.get('priceToBook', 0):.2f}x")
-                c2.metric("PER", f"{info.get('trailingPE', 0):.2f}x")
-                
-                # ROE biasanya dalam desimal, jadi dikali 100 untuk persen
-                roe = info.get('returnOnEquity', 0)
-                c3.metric("ROE", f"{roe*100:.2f}%" if roe else "N/A")
-                
-                st.success(f"Data fundamental {t_input} berhasil ditarik.")
-        except Exception as e:
-            st.error(f"Gagal mengambil data: {e}")
 
