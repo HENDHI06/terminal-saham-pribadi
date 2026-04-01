@@ -120,94 +120,89 @@ def update_password_db(u, new_p):
 
 init_db()
 
-# --- 1. PRO CYBER STYLING (FIXED SIDEBAR BUTTON) ---
-# --- PRO CYBER STYLING v2.0 ---
+# --- 1. GLOBAL 4K CYBER STYLING ---
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@400;700&family=Inter:wght@300;500;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@400;900&display=swap');
 
-    /* Global Background - Deep Space Blue */
+    /* Background Hitam 4K dengan Gradasi Kedalaman */
     .stApp {
-        background: radial-gradient(circle at top right, #0a192f, #020617);
+        background: radial-gradient(circle at 50% 50%, #0d1117 0%, #020617 100%) !important;
         color: #e2e8f0;
         font-family: 'Inter', sans-serif;
     }
 
-    /* Judul & Header Neon */
+    /* Header & Judul Neon */
     h1, h2, h3 {
-        font-family: 'Orbitron', sans-serif;
-        letter-spacing: 2px;
-        text-transform: uppercase;
+        font-family: 'Orbitron', sans-serif !important;
         background: linear-gradient(90deg, #ccff00, #00ffff);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        text-shadow: 0 0 15px rgba(204, 255, 0, 0.2);
+        filter: drop-shadow(0 0 10px rgba(204, 255, 0, 0.2));
     }
 
-    /* Kartu & Tabel Glassmorphism */
-    div[data-testid="stMetric"], .stDataFrame, div.stTabs, .stSelectbox {
-        background: rgba(15, 23, 42, 0.6) !important;
-        backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.05) !important;
-        border-radius: 12px !important;
-        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8) !important;
+    /* Efek Glassmorphism pada Kotak Input & Form */
+    div[data-testid="stForm"], div[data-testid="stMetric"], .stDataFrame {
+        background: rgba(15, 23, 42, 0.4) !important;
+        backdrop-filter: blur(20px) saturate(180%);
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 15px !important;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.4) !important;
     }
 
-    /* Tab Modern Style */
-    .stTabs [data-baseweb="tab-list"] { gap: 10px; background-color: transparent; }
-    .stTabs [data-baseweb="tab"] {
-        height: 45px;
-        background-color: rgba(255, 255, 255, 0.03) !important;
-        border-radius: 8px 8px 0 0 !important;
-        color: #64748b !important;
-        border: none !important;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: rgba(204, 255, 0, 0.1) !important;
+    /* Styling Input Field agar Sinkron dengan Background */
+    .stTextInput input {
+        background-color: rgba(0, 0, 0, 0.5) !important;
+        border: 1px solid rgba(204, 255, 0, 0.3) !important;
         color: #ccff00 !important;
-        border-bottom: 3px solid #ccff00 !important;
+        font-family: 'JetBrains Mono', monospace;
     }
 
-    /* Button Cyber Neon */
+    /* Tombol Authorize dengan Efek Glow */
     .stButton>button {
-        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        background: linear-gradient(45deg, #1e293b, #0f172a) !important;
         color: #ccff00 !important;
         border: 1px solid #ccff00 !important;
-        border-radius: 8px;
-        font-family: 'JetBrains Mono', monospace;
-        transition: all 0.3s ease;
+        transition: 0.4s;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        font-weight: bold;
     }
     .stButton>button:hover {
+        box-shadow: 0 0 30px rgba(204, 255, 0, 0.6) !important;
         background: #ccff00 !important;
         color: #000 !important;
-        box-shadow: 0 0 20px rgba(204, 255, 0, 0.4);
-        transform: translateY(-2px);
-    }
-
-    /* Input Login Styling */
-    .stTextInput input {
-        background-color: rgba(15, 23, 42, 0.8) !important;
-        color: white !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
     }
     </style>
-    """, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
 # --- 2. AUTHENTICATION ---
 if "auth" not in st.session_state:
     st.session_state["auth"] = {"logged_in": False, "user": None, "role": None}
 
+# --- 2. TAMPILKAN HEADER LOGIN 4K ---
 if not st.session_state["auth"]["logged_in"]:
-    # 1. TAMBAHKAN HEADER PRO DI SINI (Di luar kolom agar Center)
+    # BAGIAN YANG DIMASUKKAN:
     st.markdown("""
-        <div style="text-align: center; margin-top: 50px; margin-bottom: 20px;">
-            <h1 style="font-size: 4rem; margin-bottom: 0; font-family: 'Orbitron', sans-serif;">IDX</h1>
-            <p style="color: #64748b; letter-spacing: 10px; font-size: 0.7rem; font-weight: 300; text-transform: uppercase;">
-                CYBER_TERMINAL_v2.0
+        <div style="text-align: center; margin-top: 80px; margin-bottom: 40px;">
+            <h1 style="font-size: 5rem; margin-bottom: 0; font-weight: 900; line-height:1;">IDX</h1>
+            <p style="color: #64748b; letter-spacing: 15px; font-size: 0.9rem; margin-top: 10px;">
+                CYBER_TERMINAL_PRO
             </p>
-            <div style="height: 2px; width: 80px; background: #ccff00; margin: 15px auto; box-shadow: 0 0 15px #ccff00;"></div>
+            <div style="height: 2px; width: 120px; background: linear-gradient(90deg, transparent, #ccff00, transparent); margin: 25px auto;"></div>
         </div>
     """, unsafe_allow_html=True)
+
+    # LANJUTKAN DENGAN FORM LOGIN KAMU:
+    _, col2, _ = st.columns([1, 1.2, 1])
+    with col2:
+        with st.form("login_form"):
+            u = st.text_input("OPERATOR ID").strip()
+            p = st.text_input("ACCESS KEY", type="password")
+            if st.form_submit_button("AUTHORIZE ACCESS", use_container_width=True):
+                # ... (Logika login kamu tetap sama) ...
+                pass
+    st.stop()
 
     # 2. BOX LOGIN (Gunakan kolom agar berada di tengah)
     _, col2, _ = st.columns([1, 1.2, 1]) # Perlebar sedikit col2 agar nyaman
