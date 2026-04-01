@@ -160,6 +160,36 @@ init_db()
 
 import streamlit as st
 
+# --- TARUH DI ATAS, DI LUAR SEMUA LOOP ---
+def sell_position(user_id, portfolio_id, ticker, buy_price, sell_price, sell_qty, current_lots):
+    import sqlite3
+    from datetime import datetime
+    
+    with sqlite3.connect('users.db') as conn:
+        cursor = conn.cursor()
+        # Buat tabel history baru
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS history_v3 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT, ticker TEXT, buy_price REAL,
+                sell_price REAL, lots INTEGER, profit REAL, date TEXT
+            )
+        """)
+        
+        profit = (float(sell_price) - float(buy_price)) * int(sell_qty) * 100
+        date_sell = datetime.now().strftime("%Y-%m-%d %H:%M")
+        
+        cursor.execute("""
+            INSERT INTO history_v3 (user_id, ticker, buy_price, sell_price, lots, profit, date) 
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (user_id, ticker, buy_price, sell_price, int(sell_qty), profit, date_sell))
+        
+        if int(sell_qty) < int(current_lots):
+            cursor.execute("UPDATE portfolio SET lots = lots - ? WHERE id = ?", (int(sell_qty), portfolio_id))
+        else:
+            cursor.execute("DELETE FROM portfolio WHERE id = ?", (portfolio_id,))
+        conn.commit()
+
 # --- GLOBAL CYBER 4K STYLING (TEXTURED VERSION) ---
 st.markdown("""
     <style>
@@ -943,6 +973,16 @@ elif menu == "MONEY MANAGEMENT":
                     df_display[col] = "*****"
             
             st.dataframe(df_display.drop(columns=['username','tp_price','cl_price']), use_container_width=True, hide_index=True)
+
+        # --- TARUH DI DALAM LOOP PORTFOLIO ---
+# Tombol Eksekusi Jual
+btn_label = f"🚀 SELL {s_qty} LOT" if s_qty < row['lots'] else f"🔥 CLOSE POSITION"
+
+if st.button(btn_label, key=f"btn_sell_{row['id']}", use_container_width=True):
+    # Kita hanya memanggil fungsinya saja di sini
+    sell_position(user_now, row['id'], row['ticker'], row['buy_price'], s_price, s_qty, row['lots'])
+    st.success(f"Berhasil Menjual {s_qty} Lot {row['ticker']}")
+    st.rerun()
             
             # Tombol Jual
             # Loop Tampilan Portfolio
