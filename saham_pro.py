@@ -125,52 +125,41 @@ st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@400;900&display=swap');
     
-    [data-testid="stHeaderActionElements"], .stDeployButton, #MainMenu {
-        display: none !important;
-    }
-    
-    header { background-color: transparent !important; }
-
+    /* Global App Background */
     .stApp {
         background-color: #05070a;
         background-image: 
-            linear-gradient(rgba(204, 255, 0, 0.02) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(204, 255, 0, 0.02) 1px, transparent 1px),
-            linear-gradient(rgba(204, 255, 0, 0.05) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(204, 255, 0, 0.05) 1px, transparent 1px),
-            radial-gradient(circle at center, rgba(10, 25, 47, 0.4), #05070a);
-        background-size: 20px 20px, 20px 20px, 100px 100px, 100px 100px, 100% 100%;
+            radial-gradient(circle at 50% 50%, #101827 0%, #05070a 100%);
         font-family: 'JetBrains Mono', monospace;
         color: #e0e0e0;
     }
 
-    div[data-testid="stMetric"], .status-box, .stDataFrame, div[data-testid="stExpander"], .stTabs, .stForm {
-        background: rgba(0, 10, 20, 0.5) !important;
-        backdrop-filter: blur(12px);
-        border: 1px solid rgba(204, 255, 0, 0.15) !important;
-        border-radius: 10px !important;
+    /* Modern Table Header */
+    thead tr th {
+        background-color: #111827 !important;
+        color: #8b949e !important;
+        border-bottom: 2px solid #30363d !important;
+        font-size: 11px !important;
+        text-transform: uppercase;
     }
 
-    h1 {
-        font-family: 'Orbitron', sans-serif;
-        background: linear-gradient(90deg, #ccff00, #00ffff);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+    /* Glassmorphism Effect for Containers */
+    div[data-testid="stMetric"], .stDataFrame, div[data-testid="stExpander"], .stTabs {
+        background: rgba(13, 17, 23, 0.7) !important;
+        backdrop-filter: blur(10px);
+        border: 1px solid #30363d !important;
+        border-radius: 8px !important;
     }
 
-    button[kind="header"] { color: #ccff00 !important; }
-
-    /* Tabs Styling */
-    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
-    .stTabs [data-baseweb="tab"] {
-        background-color: rgba(204, 255, 0, 0.05) !important;
-        border-radius: 5px 5px 0px 0px;
-        color: #888 !important;
-    }
+    /* Neon Accent for Active Tabs */
     .stTabs [aria-selected="true"] {
-        background-color: rgba(204, 255, 0, 0.15) !important;
+        background-color: rgba(204, 255, 0, 0.1) !important;
         color: #ccff00 !important;
+        border-bottom: 2px solid #ccff00 !important;
     }
+    
+    /* Clean Hide Streamlit UI */
+    [data-testid="stHeaderActionElements"], .stDeployButton, #MainMenu { display: none !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -363,32 +352,34 @@ if menu == "STRATEGY SCANNER":
             # Filter Top 3 BSJP
             top_bsjp = df[df['REKOMENDASI'] == "🚀 BSJP"].sort_values(by='VAL(M)', ascending=False).head(3)
             with col_a:
-                st.markdown("<div style='background:rgba(204,255,0,0.1); padding:10px; border-radius:5px; border-left:4px solid #ccff00;'>", unsafe_allow_html=True)
-                st.markdown("<p style='color:#ccff00; margin-bottom:5px; font-weight:bold;'>🔥 BEST FOR BSJP</p>", unsafe_allow_html=True)
-                if not top_bsjp.empty:
-                    for _, r in top_bsjp.iterrows():
-                        st.write(f"**{r['TICKER']}** | TP: {r['TP']}")
-                else:
-                    st.caption("No BSJP signal.")
-                st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown("<p style='color:#ccff00; font-weight:bold; margin-bottom:5px;'>🔥 TOP BSJP SCALPING</p>", unsafe_allow_html=True)
+                top_bsjp = df[df['REKOMENDASI'] == "🚀 BSJP"].head(2)
+                for _, r in top_bsjp.iterrows():
+                    st.metric(label=r['TICKER'], value=r['LAST'], delta=f"{r['CHG%']}%")
 
-            # Filter Top 3 HOLD
-            top_hold = df[df['REKOMENDASI'] == "💎 HOLD"].sort_values(by='VAL(M)', ascending=False).head(3)
             with col_b:
-                st.markdown("<div style='background:rgba(0,255,255,0.1); padding:10px; border-radius:5px; border-left:4px solid #00ffff;'>", unsafe_allow_html=True)
-                st.markdown("<p style='color:#00ffff; margin-bottom:5px; font-weight:bold;'>🏆 BEST FOR HOLD</p>", unsafe_allow_html=True)
-                if not top_hold.empty:
-                    for _, r in top_hold.iterrows():
-                        st.write(f"**{r['TICKER']}** | SL: {r['CL']}")
-                else:
-                    st.caption("No HOLD trend.")
-                st.markdown("</div>", unsafe_allow_html=True)
-            
-            st.markdown("---")
+                st.markdown("<p style='color:#00ffff; font-weight:bold; margin-bottom:5px;'>🏆 TOP HOLD TREND</p>", unsafe_allow_html=True)
+                top_hold = df[df['REKOMENDASI'] == "💎 HOLD"].head(2)
+                for _, r in top_hold.iterrows():
+                    st.metric(label=r['TICKER'], value=r['LAST'], delta=f"{r['CHG%']}%", delta_color="normal")
 
             # --- TAMPILAN TABEL ---
-            tab_desk, tab_mob = st.tabs(["🖥️ DESKTOP VIEW", "📱 MOBILE VIEW"])
             with tab_desk: 
+                st.dataframe(
+                    df.drop(columns=['FULL']), 
+                    use_container_width=True, 
+                    hide_index=True,
+                    column_config={
+                        "TICKER": st.column_config.TextColumn("Ticker", help="Stock Code"),
+                        "LAST": st.column_config.NumberColumn("Price", format="%d"),
+                        "CHG%": st.column_config.NumberColumn("Change", format="%.2f%%"),
+                        "VAL(M)": st.column_config.NumberColumn("Value (M)", format="Rp %.1fM"),
+                        "REKOMENDASI": st.column_config.TextColumn("Signal"),
+                        "ENTRY": st.column_config.NumberColumn("Entry"),
+                        "TP": st.column_config.NumberColumn("Target"),
+                        "CL": st.column_config.NumberColumn("Stop Loss")
+                    }
+                )
                 st.dataframe(df.drop(columns=['FULL']), use_container_width=True, hide_index=True)
             with tab_mob: 
                 draw_mobile_cards(df)
