@@ -214,19 +214,24 @@ def load_tickers():
 def draw_mobile_cards(df):
     for _, row in df.iterrows():
         chg_color = "#ccff00" if row['CHG%'] > 0 else "#ff4b4b"
+        # Gunakan REKOMENDASI sebagai pengganti VOL_S
+        sig_label = row['REKOMENDASI'] 
+        sig_color = "#ccff00" if "BSJP" in sig_label else "#00ffff"
+        
         st.markdown(f"""
         <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(204, 255, 0, 0.2); 
                     border-radius: 12px; padding: 15px; margin-bottom: 12px; border-left: 5px solid {chg_color};">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <b style="font-size: 1.2rem; color: #ccff00;">{row['TICKER']}</b>
-                <span style="color: {chg_color}; font-weight: bold;">{row['CHG%']}% {row['VOL_S']}</span>
+                <span style="color: {sig_color}; font-weight: bold; border: 1px solid {sig_color}; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem;">
+                    {sig_label}
+                </span>
             </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; font-size: 0.85rem; color: #bbb;">
-                <div>Last: <b style="color:#fff;">{row['LAST']}</b></div>
+                <div>Last: <b style="color:#fff;">{row['LAST']}</b> ({row['CHG%']}%)</div>
                 <div>Value: <b style="color:#fff;">{row['VAL(M)']}M</b></div>
                 <div style="color: #00ffff;">Entry: {row['ENTRY']}</div>
-                <div style="color: #00ff00;">TP: {row['TP']}</div>
-                <div style="color: #ff4b4b;">CL: {row['CL']}</div>
+                <div style="color: #00ff00;">Target TP: {row['TP']}</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
