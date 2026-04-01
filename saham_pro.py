@@ -214,7 +214,6 @@ def load_tickers():
 def draw_mobile_cards(df):
     for _, row in df.iterrows():
         chg_color = "#ccff00" if row['CHG%'] > 0 else "#ff4b4b"
-        # Gunakan REKOMENDASI sebagai pengganti VOL_S
         sig_label = row['REKOMENDASI'] 
         sig_color = "#ccff00" if "BSJP" in sig_label else "#00ffff"
         
@@ -230,8 +229,9 @@ def draw_mobile_cards(df):
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; font-size: 0.85rem; color: #bbb;">
                 <div>Last: <b style="color:#fff;">{row['LAST']}</b> ({row['CHG%']}%)</div>
                 <div>Value: <b style="color:#fff;">{row['VAL(M)']}M</b></div>
-                <div style="color: #00ffff;">Entry: {row['ENTRY']}</div>
-                <div style="color: #00ff00;">Target TP: {row['TP']}</div>
+                <div style="color: #00ffff;">Entry: <b>{row['ENTRY']}</b></div>
+                <div style="color: #00ff00;">TP: <b>{row['TP']}</b></div>
+                <div style="color: #ff4b4b;">CL: <b>{row['CL']}</b></div>
             </div>
         </div>
         """, unsafe_allow_html=True)
