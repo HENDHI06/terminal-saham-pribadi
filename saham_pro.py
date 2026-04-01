@@ -77,6 +77,13 @@ def add_to_portfolio(u, t, p, l, tp, cl):
               (u, t.upper().strip(), p, l, tp, cl, datetime.now().strftime("%Y-%m-%d")))
     conn.commit(); conn.close()
 
+with sqlite3.connect('users.db') as conn:
+    try:
+        conn.execute("ALTER TABLE history ADD COLUMN lots INTEGER")
+        conn.execute("ALTER TABLE history ADD COLUMN profit REAL")
+    except:
+        pass # Jika kolom sudah ada, abaikan saja
+
 def sell_position(user_id, portfolio_id, ticker, buy_price, sell_price, sell_qty, current_lots):
     import sqlite3
     from datetime import datetime
