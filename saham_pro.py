@@ -176,22 +176,44 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. AUTHENTICATION ---
+# --- 2. AUTHENTICATION (CLEAN & PRO VERSION) ---
 if "auth" not in st.session_state:
     st.session_state["auth"] = {"logged_in": False, "user": None, "role": None}
 
-# --- 2. TAMPILKAN HEADER LOGIN 4K ---
 if not st.session_state["auth"]["logged_in"]:
-    # BAGIAN YANG DIMASUKKAN:
+    # Tampilan Header 4K
     st.markdown("""
-        <div style="text-align: center; margin-top: 80px; margin-bottom: 40px;">
-            <h1 style="font-size: 5rem; margin-bottom: 0; font-weight: 900; line-height:1;">IDX</h1>
-            <p style="color: #64748b; letter-spacing: 15px; font-size: 0.9rem; margin-top: 10px;">
-                CYBER_TERMINAL_PRO
-            </p>
-            <div style="height: 2px; width: 120px; background: linear-gradient(90deg, transparent, #ccff00, transparent); margin: 25px auto;"></div>
+        <div style="text-align: center; margin-top: 50px; margin-bottom: 30px;">
+            <h1 style="font-size: 4.5rem; margin-bottom: 0; font-family: 'Orbitron', sans-serif;">IDX</h1>
+            <p style="color: #64748b; letter-spacing: 10px; font-size: 0.7rem; font-weight: 300;">CYBER_TERMINAL_PRO</p>
+            <div style="height: 2px; width: 80px; background: #ccff00; margin: 15px auto; box-shadow: 0 0 15px #ccff00;"></div>
         </div>
     """, unsafe_allow_html=True)
+
+    # Box Login simetris di tengah
+    _, col2, _ = st.columns([1, 1.2, 1])
+    with col2:
+        # Gunakan form agar input tidak refresh setiap ngetik satu huruf
+        with st.form("login_form", clear_on_submit=False):
+            u = st.text_input("OPERATOR ID").strip()
+            p = st.text_input("ACCESS KEY", type="password")
+            submit = st.form_submit_button("AUTHORIZE ACCESS", use_container_width=True)
+            
+            if submit:
+                if u and p:
+                    # Ganti 'check_login_db' dengan nama fungsi login kamu yang asli jika berbeda
+                    role = check_login_db(u, p)
+                    if role:
+                        update_login_info(u)
+                        st.session_state["auth"] = {"logged_in": True, "user": u, "role": role}
+                        st.success("ACCESS GRANTED. INITIALIZING...")
+                        st.rerun()
+                    else:
+                        st.error("❌ ACCESS DENIED")
+                else:
+                    st.warning("PLEASE ENTER CREDENTIALS")
+    
+    st.stop() # Menahan agar konten dashboard tidak muncul sebelum loginTrue)
 
     # LANJUTKAN DENGAN FORM LOGIN KAMU:
     _, col2, _ = st.columns([1, 1.2, 1])
