@@ -120,61 +120,64 @@ def update_password_db(u, new_p):
 
 init_db()
 
-# --- 1. GLOBAL 4K CYBER STYLING ---
+# --- GLOBAL CYBER 4K STYLING (TEXTURED VERSION) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@400;900&display=swap');
 
-    /* Background Hitam 4K dengan Gradasi Kedalaman */
+    /* 1. BACKGROUND DENGAN TEKSTUR GRID & SCANLINES */
     .stApp {
-        background: radial-gradient(circle at 50% 50%, #0d1117 0%, #020617 100%) !important;
+        background-color: #020617;
+        background-image: 
+            linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
+            linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06)),
+            radial-gradient(circle at 50% 50%, #0d1117 0%, #020617 100%);
+        background-size: 100% 4px, 3px 100%, 100% 100%; /* Efek Scanline */
         color: #e2e8f0;
         font-family: 'Inter', sans-serif;
     }
 
-    /* Header & Judul Neon */
+    /* 2. EFEK GRID HALUS */
+    .stApp::before {
+        content: "";
+        position: absolute;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background-image: 
+            linear-gradient(rgba(204, 255, 0, 0.05) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(204, 255, 0, 0.05) 1px, transparent 1px);
+        background-size: 30px 30px;
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    /* 3. JUDUL NEON GLOW */
     h1, h2, h3 {
         font-family: 'Orbitron', sans-serif !important;
         background: linear-gradient(90deg, #ccff00, #00ffff);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        filter: drop-shadow(0 0 10px rgba(204, 255, 0, 0.2));
+        filter: drop-shadow(0 0 12px rgba(204, 255, 0, 0.4));
     }
 
-    /* Efek Glassmorphism pada Kotak Input & Form */
-    div[data-testid="stForm"], div[data-testid="stMetric"], .stDataFrame {
-        background: rgba(15, 23, 42, 0.4) !important;
-        backdrop-filter: blur(20px) saturate(180%);
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    /* 4. GLASSMORPHISM BOX (TRANSPARAN TEBAL) */
+    div[data-testid="stForm"], div[data-testid="stMetric"], .stDataFrame, .stTabs {
+        background: rgba(15, 23, 42, 0.8) !important;
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(204, 255, 0, 0.2) !important;
         border-radius: 15px !important;
-        box-shadow: 0 20px 40px rgba(0,0,0,0.4) !important;
+        box-shadow: 0 0 20px rgba(0,0,0,0.5) !important;
     }
 
-    /* Styling Input Field agar Sinkron dengan Background */
+    /* 5. INPUT FIELD DENGAN TEKS MENYALA */
     .stTextInput input {
-        background-color: rgba(0, 0, 0, 0.5) !important;
-        border: 1px solid rgba(204, 255, 0, 0.3) !important;
+        background-color: rgba(0, 0, 0, 0.7) !important;
+        border: 1px solid rgba(204, 255, 0, 0.4) !important;
         color: #ccff00 !important;
         font-family: 'JetBrains Mono', monospace;
-    }
-
-    /* Tombol Authorize dengan Efek Glow */
-    .stButton>button {
-        background: linear-gradient(45deg, #1e293b, #0f172a) !important;
-        color: #ccff00 !important;
-        border: 1px solid #ccff00 !important;
-        transition: 0.4s;
-        text-transform: uppercase;
-        letter-spacing: 2px;
-        font-weight: bold;
-    }
-    .stButton>button:hover {
-        box-shadow: 0 0 30px rgba(204, 255, 0, 0.6) !important;
-        background: #ccff00 !important;
-        color: #000 !important;
+        text-shadow: 0 0 5px rgba(204, 255, 0, 0.5);
     }
     </style>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
 # --- 2. AUTHENTICATION (CLEAN & PRO VERSION) ---
 if "auth" not in st.session_state:
