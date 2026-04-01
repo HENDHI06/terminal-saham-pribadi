@@ -395,6 +395,9 @@ if menu == "STRATEGY SCANNER":
                         "CL": st.column_config.NumberColumn("Stop Loss")
                     }
                 )
+
+            with tab_mob: 
+                draw_mobile_cards(df)
                 
             st.markdown("---")
             # --- 3. LANJUT KE BAGIAN CHART ---
