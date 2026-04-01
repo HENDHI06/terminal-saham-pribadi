@@ -82,23 +82,39 @@ def sell_position(user_id, portfolio_id, ticker, buy_price, sell_price, sell_qty
     from datetime import datetime
     
     with sqlite3.connect('users.db') as conn:
-        # 1. Catat keuntungan ke tabel History (Realized P/L)
-        # Menghitung profit berdasarkan jumlah lot yang dijual saja
+        cursor = conn.cursor()
+        
+        # 1. Pastikan tabel history ada (Mencegah OperationalError)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT,
+                ticker TEXT,
+                buy_price REAL,
+                sell_price REAL,
+                lots INTEGER,
+                profit REAL,
+                date TEXT
+            )
+        """)
+        
+        # 2. Hitung Profit (Selisih x Lot x 100)
         profit = (sell_price - buy_price) * sell_qty * 100
         date_sell = datetime.now().strftime("%Y-%m-%d %H:%M")
         
-        conn.execute("""
+        # 3. Insert ke History
+        cursor.execute("""
             INSERT INTO history (user_id, ticker, buy_price, sell_price, lots, profit, date) 
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (user_id, ticker, buy_price, sell_price, sell_qty, profit, date_sell))
         
-        # 2. Update atau Hapus di tabel Portfolio
+        # 4. Update atau Hapus di tabel Portfolio
         if sell_qty < current_lots:
-            # JIKA JUAL SEBAGIAN: Kurangi jumlah lot di database
-            conn.execute("UPDATE portfolio SET lots = lots - ? WHERE id = ?", (sell_qty, portfolio_id))
+            # JUAL SEBAGIAN: Kurangi jumlah lot
+            cursor.execute("UPDATE portfolio SET lots = lots - ? WHERE id = ?", (sell_qty, portfolio_id))
         else:
-            # JIKA JUAL SEMUA: Hapus baris dari portfolio
-            conn.execute("DELETE FROM portfolio WHERE id = ?", (portfolio_id,))
+            # JUAL SEMUA: Hapus baris
+            cursor.execute("DELETE FROM portfolio WHERE id = ?", (portfolio_id,))
         
         conn.commit()
 
