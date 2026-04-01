@@ -369,9 +369,6 @@ if menu == "STRATEGY SCANNER":
                     st.caption("No HOLD trend.")
             
             st.markdown("---")
-
-            # --- 2. TABEL DATA (Mendefinisikan Tab agar tidak Error) ---
-            tab_desk, tab_mob = st.tabs(["🖥️ DESKTOP VIEW", "📱 MOBILE VIEW"])
             
 # 2. TAMPILKAN HASIL (Indentasi 4 spasi dari 'if menu')
     if 'results' in st.session_state:
@@ -398,10 +395,7 @@ if menu == "STRATEGY SCANNER":
                         "CL": st.column_config.NumberColumn("Stop Loss")
                     }
                 )
-            
-            with tab_mob: # <--- SEJAJAR DENGAN 'with tab_desk' (12 spasi)
-                draw_mobile_cards(df)
-
+                
             st.markdown("---")
             # --- 3. LANJUT KE BAGIAN CHART ---
             st.markdown("### 📈 FOCUS_ANALYSIS")
