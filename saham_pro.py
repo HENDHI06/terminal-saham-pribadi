@@ -192,10 +192,6 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# Contoh struktur agar tampilan rapi dan tidak double:
-st.markdown("<h1 style='text-align: center;'>IDX</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; letter-spacing: 5px;'>CYBER TERMINAL PRO</p>", unsafe_allow_html=True)
-
 # --- 2. AUTHENTICATION (CLEAN & PRO VERSION) ---
 if "auth" not in st.session_state:
     st.session_state["auth"] = {"logged_in": False, "user": None, "role": None}
