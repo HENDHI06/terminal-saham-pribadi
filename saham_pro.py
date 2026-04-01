@@ -201,26 +201,34 @@ def load_tickers():
     except: return []
 
 def draw_mobile_cards(df):
+    if df.empty:
+        st.warning("No data available for Mobile View.")
+        return
+
     for _, row in df.iterrows():
-        chg_color = "#ccff00" if row['CHG%'] > 0 else "#ff4b4b"
-        sig_label = row['REKOMENDASI'] 
+        # Penentuan Warna Berdasarkan Perubahan Harga
+        chg_val = row.get('CHG%', 0)
+        chg_color = "#ccff00" if chg_val > 0 else "#ff4b4b"
+        
+        # Penentuan Label dan Warna Signal
+        sig_label = row.get('REKOMENDASI', 'N/A')
         sig_color = "#ccff00" if "BSJP" in sig_label else "#00ffff"
         
         st.markdown(f"""
-        <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(204, 255, 0, 0.2); 
-                    border-radius: 12px; padding: 15px; margin-bottom: 12px; border-left: 5px solid {chg_color};">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <b style="font-size: 1.2rem; color: #ccff00;">{row['TICKER']}</b>
-                <span style="color: {sig_color}; font-weight: bold; border: 1px solid {sig_color}; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem;">
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); 
+                    border-left: 4px solid {chg_color}; border-radius: 10px; padding: 12px; margin-bottom: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-size: 1.1rem; font-weight: 800; color: #fff;">{row['TICKER']}</span>
+                <span style="background: {sig_color}22; color: {sig_color}; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; border: 1px solid {sig_color}44;">
                     {sig_label}
                 </span>
             </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; font-size: 0.85rem; color: #bbb;">
-                <div>Last: <b style="color:#fff;">{row['LAST']}</b> ({row['CHG%']}%)</div>
-                <div>Value: <b style="color:#fff;">{row['VAL(M)']}M</b></div>
-                <div style="color: #00ffff;">Entry: <b>{row['ENTRY']}</b></div>
-                <div style="color: #00ff00;">TP: <b>{row['TP']}</b></div>
-                <div style="color: #ff4b4b;">CL: <b>{row['CL']}</b></div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.85rem;">
+                <div style="color: #888;">Price: <b style="color: #fff;">{int(row['LAST'])}</b> <span style="color: {chg_color};">({chg_val}%)</span></div>
+                <div style="color: #888;">Value: <b style="color: #fff;">{row['VAL(M)']}M</b></div>
+                <div style="color: #888;">Entry: <b style="color: #00ffff;">{int(row['ENTRY'])}</b></div>
+                <div style="color: #888;">Target: <b style="color: #ccff00;">{int(row['TP'])}</b></div>
+                <div style="color: #888;">Stop Loss: <b style="color: #ff4b4b;">{int(row['CL'])}</b></div>
             </div>
         </div>
         """, unsafe_allow_html=True)
