@@ -233,29 +233,38 @@ def draw_mobile_cards(df):
 
 def run_scan(tickers, mode):
     results = []
+    # Buat Progress Bar di UI
+    progress_text = "Operation in progress. Please wait."
+    my_bar = st.progress(0, text=progress_text)
+    
+    total_tickers = len(tickers)
     min_chg = 4.0 if mode == "Ketat" else 2.0
-    for t in tickers:
+
+    for idx, t in enumerate(tickers):
+        # Update Progress Bar (Hitung Persentase)
+        percent_complete = (idx + 1) / total_tickers
+        my_bar.progress(percent_complete, text=f"🔍 SCANNING {idx+1}/{total_tickers} TICKERS ({int(percent_complete*100)}%)")
+        
         try:
             full_t = f"{t}.JK"
-            df = yf.download(full_t, period="35d", interval="1d", progress=False)
+            # Pakai period lebih pendek biar kenceng (misal 30d)
+            df = yf.download(full_t, period="30d", interval="1d", progress=False)
+            
             if df.empty or len(df) < 20: continue
             
+            # --- Logika Scan Kamu ---
             df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
             c_now, c_prev = df['Close'].iloc[-1], df['Close'].iloc[-2]
             chg = ((c_now - c_prev) / c_prev) * 100
             
-            # --- FILTER VOLUME: WAJIB TRANSAKSI > 500 JUTA ---
+            # Filter Volume & Indikator
             avg_vol = df['Volume'].tail(5).mean()
-            val_tr = avg_vol * c_now
-            if val_tr < 500_000_000: continue 
+            if (avg_vol * c_now) < 500_000_000: continue 
 
-            # Indikator Strategi
             ma20 = df['Close'].rolling(20).mean().iloc[-1]
-            # RSI Logic
-            delta = df['Close'].diff(); gain = (delta.where(delta > 0, 0)).rolling(14).mean(); loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
-            rsi = 100 - (100 / (1 + (gain.iloc[-1]/loss.iloc[-1])))
+            delta = df['Close'].diff(); g = (delta.where(delta > 0, 0)).rolling(14).mean(); l = (-delta.where(delta < 0, 0)).rolling(14).mean()
+            rsi = 100 - (100 / (1 + (g.iloc[-1]/l.iloc[-1])))
 
-            # Penentuan Label Rekomendasi
             sig = "🔎 WATCH"
             if chg >= min_chg: sig = "🚀 BSJP"
             elif c_now > ma20 and 45 < rsi < 70: sig = "💎 HOLD"
@@ -265,6 +274,9 @@ def run_scan(tickers, mode):
                 "RSI": round(rsi, 1), "REKOMENDASI": sig, "FULL": full_t
             })
         except: continue
+    
+    # Hapus bar setelah selesai
+    my_bar.empty()
     return pd.DataFrame(results)
 
 # --- 4. NAVIGATION ---
@@ -317,10 +329,10 @@ if menu == "STRATEGY SCANNER":
             st.rerun()
 
     if st.button("⚡ EXECUTE_DEEP_SCAN", use_container_width=True):
-        with st.spinner("🔍 Memindai 800+ Saham... Mohon Tunggu."):
-            # Pastikan fungsi run_scan kamu sudah versi terbaru dengan filter Volume & RSI
-            st.session_state.results = run_scan(load_tickers(), mode_scan)
-            st.session_state.scan_time = datetime.now().strftime("%H:%M:%S")
+        # Langsung panggil, progress bar sudah ada di dalam fungsi run_scan
+        st.session_state.results = run_scan(load_tickers(), mode_scan)
+        st.session_state.scan_time = datetime.now().strftime("%H:%M:%S")
+        st.rerun()
 
     # 3. Hasil Analisis (Dashboard & Tabel)
     if 'results' in st.session_state and not st.session_state.results.empty:
