@@ -181,12 +181,6 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# Test Konten agar terlihat gerakannya
-st.title("Cyber Login")
-st.text_input("Username")
-st.text_input("Password", type="password")
-st.button("Access System")
-
 # --- 2. AUTHENTICATION (CLEAN & PRO VERSION) ---
 if "auth" not in st.session_state:
     st.session_state["auth"] = {"logged_in": False, "user": None, "role": None}
