@@ -122,81 +122,72 @@ init_db()
 
 import streamlit as st
 
-# --- GLOBAL CYBER 4K STYLING (FIXED VERSION) ---
+import streamlit as st
+
+# --- RE-OPTIMIZED CYBER GRID ANIMATION ---
 st.markdown("""
     <style>
-    /* 1. DEFINE ANIMASI MOVING MATRIX */
+    /* 1. ANIMASI DIBUAT LEBIH HALUS */
     @keyframes moveGrid {
-        0% { transform: translateY(0); }
-        100% { transform: translateY(40px); }
+        from { background-position: 0 0; }
+        to { background-position: 0 40px; }
     }
 
-    /* 2. BACKGROUND UTAMA */
+    /* 2. BERSIHKAN BG BAWAAN */
     .stApp {
-        background-color: #020617;
-        color: #e2e8f0;
-        font-family: 'Inter', sans-serif;
+        background-color: #020617 !important;
     }
 
-    /* 3. LAYER BG BERGERAK (PERBAIKAN DI SINI) */
-    .stApp::before {
+    /* 3. PINDAHKAN ANIMASI KE .main AGAR TIDAK TERHALANG */
+    .main {
+        background-image: 
+            linear-gradient(rgba(204, 255, 0, 0.05) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0, 255, 255, 0.03) 1px, transparent 1px) !important;
+        background-size: 40px 40px !important;
+        
+        /* AKTIFKAN ANIMASI LANGSUNG DI BODY UTAMA */
+        animation: moveGrid 4s linear infinite !important;
+        
+        /* OPTIMASI RENDER */
+        will-change: background-position;
+    }
+
+    /* 4. EFEK GLOW TAMBAHAN AGAR TERLIHAT CYBER */
+    .main::before {
         content: "";
         position: fixed;
-        top: 0; left: 0; right: 0; bottom: 0;
-        background-image: 
-            linear-gradient(rgba(204, 255, 0, 0.04) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(0, 255, 255, 0.02) 1px, transparent 1px);
-        background-size: 40px 40px;
-        background-position: center;
-        
-        /* Masking agar pinggiran halus */
-        -webkit-mask-image: radial-gradient(circle, rgba(0,0,0,1) 30%, rgba(0,0,0,0) 100%);
-        mask-image: radial-gradient(circle, rgba(0,0,0,1) 30%, rgba(0,0,0,0) 100%);
-        
-        animation: moveGrid 8s linear infinite; 
-        
-        /* KUNCI PERBAIKAN: z-index negatif agar di bawah konten */
-        z-index: -1; 
+        top: 0; left: 0; width: 100%; height: 100%;
+        background: radial-gradient(circle at 50% 50%, transparent 20%, #020617 90%);
         pointer-events: none;
+        z-index: 1;
     }
 
-    /* 4. NEON TYPOGRAPHY */
-    h1, h2, h3 {
-        font-family: 'Orbitron', sans-serif !important;
-        background: linear-gradient(90deg, #ccff00, #00ffff);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        font-weight: 800;
-    }
-
-    /* 5. GLASSMORPHISM (Pastikan konten terlihat) */
-    div[data-testid="stVerticalBlock"] > div {
+    /* 5. PASTIKAN KONTEN LOGIN DI ATAS BG */
+    div[data-testid="stVerticalBlock"] {
         position: relative;
         z-index: 10;
     }
 
-    div[data-testid="stMetric"], .stDataFrame, div.stTabs, .stSelectbox, .stTextInput {
-        background: rgba(15, 23, 42, 0.8) !important;
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
-        border-radius: 12px !important;
+    /* 6. STYLE INPUT & TOMBOL (AGAR TIDAK BLANK) */
+    .stTextInput input {
+        background-color: rgba(30, 41, 59, 0.7) !important;
+        color: white !important;
+        border: 1px solid #ccff00 !important;
     }
-
-    /* 6. BUTTON NEON */
+    
     .stButton>button {
-        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%) !important;
-        color: #ccff00 !important;
-        border: 1px solid rgba(204, 255, 0, 0.5) !important;
-        width: 100%;
-    }
-
-    .stButton>button:hover {
         background: #ccff00 !important;
-        color: #000 !important;
-        box-shadow: 0 0 20px rgba(204, 255, 0, 0.4);
+        color: black !important;
+        font-weight: bold !important;
     }
     </style>
     """, unsafe_allow_html=True)
+
+# Test Konten agar terlihat gerakannya
+st.title("Cyber Login")
+st.text_input("Username")
+st.text_input("Password", type="password")
+st.button("Access System")
 
 # --- 2. AUTHENTICATION (CLEAN & PRO VERSION) ---
 if "auth" not in st.session_state:
