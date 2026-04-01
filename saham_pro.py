@@ -340,37 +340,46 @@ if menu == "STRATEGY SCANNER":
         st.session_state.scan_time = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%H:%M:%S")
 
     # 2. TAMPILKAN HASIL (Satu blok tunggal agar tidak double)
+    # 2. TAMPILKAN HASIL (Versi Fix NameError & Pro Look)
     if 'results' in st.session_state:
         df = st.session_state.results
         if not df.empty:
             st.caption(f"Last Sync: {st.session_state.scan_time} WIB")
             
-            # --- FITUR BARU: TOP 3 PICKS (Ditaruh di atas Tabel) ---
-            st.markdown("### 🌟 TERMINAL_TOP_PICKS")
+            # --- 1. TOP PICKS SECTION ---
+            st.markdown("### 🌟 ANALYTICS_INSIGHT")
             col_a, col_b = st.columns(2)
             
-            # Filter Top 3 BSJP
-            top_bsjp = df[df['REKOMENDASI'] == "🚀 BSJP"].sort_values(by='VAL(M)', ascending=False).head(3)
             with col_a:
                 st.markdown("<p style='color:#ccff00; font-weight:bold; margin-bottom:5px;'>🔥 TOP BSJP SCALPING</p>", unsafe_allow_html=True)
                 top_bsjp = df[df['REKOMENDASI'] == "🚀 BSJP"].head(2)
-                for _, r in top_bsjp.iterrows():
-                    st.metric(label=r['TICKER'], value=r['LAST'], delta=f"{r['CHG%']}%")
+                if not top_bsjp.empty:
+                    for _, r in top_bsjp.iterrows():
+                        st.metric(label=r['TICKER'], value=int(r['LAST']), delta=f"{r['CHG%']}%")
+                else:
+                    st.caption("No BSJP signal.")
 
             with col_b:
                 st.markdown("<p style='color:#00ffff; font-weight:bold; margin-bottom:5px;'>🏆 TOP HOLD TREND</p>", unsafe_allow_html=True)
                 top_hold = df[df['REKOMENDASI'] == "💎 HOLD"].head(2)
-                for _, r in top_hold.iterrows():
-                    st.metric(label=r['TICKER'], value=r['LAST'], delta=f"{r['CHG%']}%", delta_color="normal")
+                if not top_hold.empty:
+                    for _, r in top_hold.iterrows():
+                        st.metric(label=r['TICKER'], value=int(r['LAST']), delta=f"{r['CHG%']}%", delta_color="normal")
+                else:
+                    st.caption("No HOLD trend.")
+            
+            st.markdown("---")
 
-            # --- TAMPILAN TABEL ---
+            # --- 2. TABEL DATA (Mendefinisikan Tab agar tidak Error) ---
+            tab_desk, tab_mob = st.tabs(["🖥️ DESKTOP VIEW", "📱 MOBILE VIEW"])
+            
             with tab_desk: 
                 st.dataframe(
                     df.drop(columns=['FULL']), 
                     use_container_width=True, 
                     hide_index=True,
                     column_config={
-                        "TICKER": st.column_config.TextColumn("Ticker", help="Stock Code"),
+                        "TICKER": st.column_config.TextColumn("Ticker"),
                         "LAST": st.column_config.NumberColumn("Price", format="%d"),
                         "CHG%": st.column_config.NumberColumn("Change", format="%.2f%%"),
                         "VAL(M)": st.column_config.NumberColumn("Value (M)", format="Rp %.1fM"),
@@ -380,9 +389,13 @@ if menu == "STRATEGY SCANNER":
                         "CL": st.column_config.NumberColumn("Stop Loss")
                     }
                 )
-                st.dataframe(df.drop(columns=['FULL']), use_container_width=True, hide_index=True)
+            
             with tab_mob: 
                 draw_mobile_cards(df)
+
+            st.markdown("---")
+            # --- 3. LANJUT KE BAGIAN CHART ---
+            st.markdown("### 📈 FOCUS_ANALYSIS")
             
             # --- BAGIAN CHART (FOCUS TARGET) ---
             st.markdown("### 📈 FOCUS_TARGET_ANALYSIS")
