@@ -123,58 +123,82 @@ init_db()
 # --- GLOBAL CYBER 4K STYLING (TEXTURED VERSION) ---
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@400;900&display=swap');
+    /* 1. DEFINE ANIMASI MOVING MATRIX */
+    @keyframes moveGrid {
+        0% { transform: translateY(0); }
+        100% { transform: translateY(40px); } /* Bergerak ke bawah */
+    }
 
-    /* 1. BACKGROUND DENGAN TEKSTUR GRID & SCANLINES */
+    /* 2. BACKGROUND UTAMA (ABSULUTE BLACK 4K) */
     .stApp {
         background-color: #020617;
-        background-image: 
-            linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
-            linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06)),
-            radial-gradient(circle at 50% 50%, #0d1117 0%, #020617 100%);
-        background-size: 100% 4px, 3px 100%, 100% 100%; /* Efek Scanline */
         color: #e2e8f0;
         font-family: 'Inter', sans-serif;
+        position: relative;
+        overflow: hidden;
     }
 
-    /* 2. EFEK GRID HALUS */
+    /* 3. LAYER BG BERGERAK (MOVING GRID PATTERN) */
     .stApp::before {
         content: "";
-        position: absolute;
-        top: 0; left: 0; width: 100%; height: 100%;
+        position: fixed;
+        top: -100px; left: -100px; right: -100px; bottom: -100px;
         background-image: 
-            linear-gradient(rgba(204, 255, 0, 0.05) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(204, 255, 0, 0.05) 1px, transparent 1px);
-        background-size: 30px 30px;
-        pointer-events: none;
+            linear-gradient(rgba(204, 255, 0, 0.04) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0, 255, 255, 0.02) 1px, transparent 1px);
+        background-size: 40px 40px;
+        background-position: center;
+        mask-image: radial-gradient(circle, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 80%);
+        -webkit-mask-image: radial-gradient(circle, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 80%);
+        
+        /* AKTIFKAN ANIMASI DI SINI */
+        animation: moveGrid 8s linear infinite; 
+        
         z-index: 0;
+        pointer-events: none;
     }
 
-    /* 3. JUDUL NEON GLOW */
+    /* 4. NEON TYPOGRAPHY (PRO LOOK) */
     h1, h2, h3 {
         font-family: 'Orbitron', sans-serif !important;
+        text-transform: uppercase;
         background: linear-gradient(90deg, #ccff00, #00ffff);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        filter: drop-shadow(0 0 12px rgba(204, 255, 0, 0.4));
+        text-shadow: 0 0 15px rgba(204, 255, 0, 0.3);
+        font-weight: 800;
+        z-index: 10;
+        position: relative;
     }
 
-    /* 4. GLASSMORPHISM BOX (TRANSPARAN TEBAL) */
-    div[data-testid="stForm"], div[data-testid="stMetric"], .stDataFrame, .stTabs {
-        background: rgba(15, 23, 42, 0.8) !important;
-        backdrop-filter: blur(20px);
-        border: 1px solid rgba(204, 255, 0, 0.2) !important;
-        border-radius: 15px !important;
-        box-shadow: 0 0 20px rgba(0,0,0,0.5) !important;
+    /* 5. GLASSMORPHISM CONTAINERS (TEBAL & BURAM) */
+    /* Container dinaikkan agar berada di atas moving background */
+    div[data-testid="stMetric"], .stDataFrame, div.stTabs, .stSelectbox {
+        background: rgba(15, 23, 42, 0.6) !important;
+        backdrop-filter: blur(15px);
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        border-radius: 12px !important;
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6) !important;
+        position: relative;
+        z-index: 20;
     }
 
-    /* 5. INPUT FIELD DENGAN TEKS MENYALA */
-    .stTextInput input {
-        background-color: rgba(0, 0, 0, 0.7) !important;
-        border: 1px solid rgba(204, 255, 0, 0.4) !important;
+    /* 6. BUTTON NEON GLOW */
+    .stButton>button {
+        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%) !important;
         color: #ccff00 !important;
-        font-family: 'JetBrains Mono', monospace;
-        text-shadow: 0 0 5px rgba(204, 255, 0, 0.5);
+        border: 1px solid rgba(204, 255, 0, 0.5) !important;
+        transition: 0.3s;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        z-index: 30;
+    }
+
+    .stButton>button:hover {
+        background: #ccff00 !important;
+        color: #000 !important;
+        box-shadow: 0 0 25px rgba(204, 255, 0, 0.6);
+        transform: translateY(-2px);
     }
     </style>
     """, unsafe_allow_html=True)
