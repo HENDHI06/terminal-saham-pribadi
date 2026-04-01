@@ -121,45 +121,75 @@ def update_password_db(u, new_p):
 init_db()
 
 # --- 1. PRO CYBER STYLING (FIXED SIDEBAR BUTTON) ---
+# --- PRO CYBER STYLING v2.0 ---
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@400;900&display=swap');
-    
-    /* Global App Background */
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@400;700&family=Inter:wght@300;500;800&display=swap');
+
+    /* Global Background - Deep Space Blue */
     .stApp {
-        background-color: #05070a;
-        background-image: 
-            radial-gradient(circle at 50% 50%, #101827 0%, #05070a 100%);
-        font-family: 'JetBrains Mono', monospace;
-        color: #e0e0e0;
+        background: radial-gradient(circle at top right, #0a192f, #020617);
+        color: #e2e8f0;
+        font-family: 'Inter', sans-serif;
     }
 
-    /* Modern Table Header */
-    thead tr th {
-        background-color: #111827 !important;
-        color: #8b949e !important;
-        border-bottom: 2px solid #30363d !important;
-        font-size: 11px !important;
+    /* Judul & Header Neon */
+    h1, h2, h3 {
+        font-family: 'Orbitron', sans-serif;
+        letter-spacing: 2px;
         text-transform: uppercase;
+        background: linear-gradient(90deg, #ccff00, #00ffff);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-shadow: 0 0 15px rgba(204, 255, 0, 0.2);
     }
 
-    /* Glassmorphism Effect for Containers */
-    div[data-testid="stMetric"], .stDataFrame, div[data-testid="stExpander"], .stTabs {
-        background: rgba(13, 17, 23, 0.7) !important;
-        backdrop-filter: blur(10px);
-        border: 1px solid #30363d !important;
-        border-radius: 8px !important;
+    /* Kartu & Tabel Glassmorphism */
+    div[data-testid="stMetric"], .stDataFrame, div.stTabs, .stSelectbox {
+        background: rgba(15, 23, 42, 0.6) !important;
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.05) !important;
+        border-radius: 12px !important;
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8) !important;
     }
 
-    /* Neon Accent for Active Tabs */
+    /* Tab Modern Style */
+    .stTabs [data-baseweb="tab-list"] { gap: 10px; background-color: transparent; }
+    .stTabs [data-baseweb="tab"] {
+        height: 45px;
+        background-color: rgba(255, 255, 255, 0.03) !important;
+        border-radius: 8px 8px 0 0 !important;
+        color: #64748b !important;
+        border: none !important;
+    }
     .stTabs [aria-selected="true"] {
         background-color: rgba(204, 255, 0, 0.1) !important;
         color: #ccff00 !important;
-        border-bottom: 2px solid #ccff00 !important;
+        border-bottom: 3px solid #ccff00 !important;
     }
-    
-    /* Clean Hide Streamlit UI */
-    [data-testid="stHeaderActionElements"], .stDeployButton, #MainMenu { display: none !important; }
+
+    /* Button Cyber Neon */
+    .stButton>button {
+        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        color: #ccff00 !important;
+        border: 1px solid #ccff00 !important;
+        border-radius: 8px;
+        font-family: 'JetBrains Mono', monospace;
+        transition: all 0.3s ease;
+    }
+    .stButton>button:hover {
+        background: #ccff00 !important;
+        color: #000 !important;
+        box-shadow: 0 0 20px rgba(204, 255, 0, 0.4);
+        transform: translateY(-2px);
+    }
+
+    /* Input Login Styling */
+    .stTextInput input {
+        background-color: rgba(15, 23, 42, 0.8) !important;
+        color: white !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -168,19 +198,38 @@ if "auth" not in st.session_state:
     st.session_state["auth"] = {"logged_in": False, "user": None, "role": None}
 
 if not st.session_state["auth"]["logged_in"]:
-    _, col2, _ = st.columns([1,1.5,1])
+    # 1. TAMBAHKAN HEADER PRO DI SINI (Di luar kolom agar Center)
+    st.markdown("""
+        <div style="text-align: center; margin-top: 50px; margin-bottom: 20px;">
+            <h1 style="font-size: 4rem; margin-bottom: 0; font-family: 'Orbitron', sans-serif;">IDX</h1>
+            <p style="color: #64748b; letter-spacing: 10px; font-size: 0.7rem; font-weight: 300; text-transform: uppercase;">
+                CYBER_TERMINAL_v2.0
+            </p>
+            <div style="height: 2px; width: 80px; background: #ccff00; margin: 15px auto; box-shadow: 0 0 15px #ccff00;"></div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # 2. BOX LOGIN (Gunakan kolom agar berada di tengah)
+    _, col2, _ = st.columns([1, 1.2, 1]) # Perlebar sedikit col2 agar nyaman
     with col2:
-        st.markdown("<div style='text-align:center; padding:50px 0;'><h1 style='font-size:3rem; margin-bottom:0;'>IDX</h1><p style='color:#888; letter-spacing:5px;'>CYBER TERMINAL</p></div>", unsafe_allow_html=True)
         with st.form("login_form"):
+            # Gunakan label uppercase agar senada dengan tema terminal
             u = st.text_input("OPERATOR ID").strip()
             p = st.text_input("ACCESS KEY", type="password")
-            if st.form_submit_button("AUTHORIZE ACCESS", width="stretch"):
+            
+            # Submit button
+            if st.form_submit_button("AUTHORIZE ACCESS", use_container_width=True):
                 role = check_login_db(u, p)
                 if role:
                     update_login_info(u)
                     st.session_state["auth"] = {"logged_in": True, "user": u, "role": role}
                     st.rerun()
-                else: st.error("ACCESS DENIED")
+                else: 
+                    st.error("❌ ACCESS DENIED: INVALID CREDENTIALS")
+    
+    # Tambahkan footer kecil di bawah box login (Opsional)
+    st.markdown("<p style='text-align:center; color:#1e293b; font-size:0.6rem; margin-top:50px;'>SECURE ENCRYPTED CONNECTION ENABLED</p>", unsafe_allow_html=True)
+    
     st.stop()
 
 # --- 3. DATA ENGINE & MOBILE OPTIMIZATION ---
