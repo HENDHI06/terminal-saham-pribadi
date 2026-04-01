@@ -122,64 +122,86 @@ init_db()
 
 import streamlit as st
 
-# --- RE-OPTIMIZED CYBER GRID ANIMATION ---
+# --- FINAL CYBER 4K STYLING (SMOOTH & FIXED) ---
 st.markdown("""
     <style>
-    /* 1. ANIMASI DIBUAT LEBIH HALUS */
+    /* 1. ANIMASI BACKGROUND */
     @keyframes moveGrid {
-        from { background-position: 0 0; }
-        to { background-position: 0 40px; }
+        0% { background-position: 0 0; }
+        100% { background-position: 0 40px; }
     }
 
-    /* 2. BERSIHKAN BG BAWAAN */
+    /* 2. BACKGROUND UTAMA (Mencegah Double Layer) */
     .stApp {
         background-color: #020617 !important;
     }
 
-    /* 3. PINDAHKAN ANIMASI KE .main AGAR TIDAK TERHALANG */
-    .main {
+    /* 3. LAYER GRID KHUSUS (Dipasang di level terendah) */
+    [data-testid="stAppViewContainer"] {
         background-image: 
-            linear-gradient(rgba(204, 255, 0, 0.05) 1px, transparent 1px),
+            linear-gradient(rgba(204, 255, 0, 0.07) 1px, transparent 1px),
             linear-gradient(90deg, rgba(0, 255, 255, 0.03) 1px, transparent 1px) !important;
         background-size: 40px 40px !important;
-        
-        /* AKTIFKAN ANIMASI LANGSUNG DI BODY UTAMA */
-        animation: moveGrid 4s linear infinite !important;
-        
-        /* OPTIMASI RENDER */
-        will-change: background-position;
+        animation: moveGrid 3s linear infinite !important;
     }
 
-    /* 4. EFEK GLOW TAMBAHAN AGAR TERLIHAT CYBER */
-    .main::before {
+    /* 4. OVERLAY GRADIENT (Agar tidak terlalu silau & fokus ke tengah) */
+    [data-testid="stAppViewContainer"]::before {
         content: "";
         position: fixed;
         top: 0; left: 0; width: 100%; height: 100%;
-        background: radial-gradient(circle at 50% 50%, transparent 20%, #020617 90%);
+        background: radial-gradient(circle at center, transparent 0%, #020617 100%);
         pointer-events: none;
-        z-index: 1;
+        z-index: 0;
     }
 
-    /* 5. PASTIKAN KONTEN LOGIN DI ATAS BG */
-    div[data-testid="stVerticalBlock"] {
-        position: relative;
-        z-index: 10;
+    /* 5. FIX KONTEN AGAR TIDAK DOUBLE/GHOSTING */
+    [data-testid="stVerticalBlock"] {
+        background: transparent !important;
     }
 
-    /* 6. STYLE INPUT & TOMBOL (AGAR TIDAK BLANK) */
-    .stTextInput input {
-        background-color: rgba(30, 41, 59, 0.7) !important;
-        color: white !important;
-        border: 1px solid #ccff00 !important;
+    /* 6. STYLE FORM LOGIN (IDX Terminal) */
+    div[data-testid="stVerticalBlock"] > div:has(input) {
+        background: rgba(15, 23, 42, 0.85) !important;
+        backdrop-filter: blur(12px);
+        padding: 2rem;
+        border-radius: 15px;
+        border: 1px solid rgba(204, 255, 0, 0.3);
+        box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
     }
-    
+
+    /* 7. TYPOGRAPHY & BUTTON */
+    h1, h2, .stMarkdown p {
+        color: #ccff00 !important;
+        text-shadow: 0 0 10px rgba(204, 255, 0, 0.5);
+    }
+
     .stButton>button {
         background: #ccff00 !important;
-        color: black !important;
+        color: #000 !important;
         font-weight: bold !important;
+        border: none !important;
+        width: 100%;
+        transition: 0.3s;
+    }
+
+    .stButton>button:hover {
+        box-shadow: 0 0 20px #ccff00;
+        transform: scale(1.02);
     }
     </style>
     """, unsafe_allow_html=True)
+
+# Contoh struktur agar tampilan rapi dan tidak double:
+st.markdown("<h1 style='text-align: center;'>IDX</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; letter-spacing: 5px;'>CYBER TERMINAL PRO</p>", unsafe_allow_html=True)
+
+with st.container():
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.text_input("OPERATOR ID")
+        st.text_input("ACCESS KEY", type="password")
+        st.button("INITIATE SYSTEM")
 
 # --- 2. AUTHENTICATION (CLEAN & PRO VERSION) ---
 if "auth" not in st.session_state:
