@@ -120,85 +120,80 @@ def update_password_db(u, new_p):
 
 init_db()
 
-# --- GLOBAL CYBER 4K STYLING (TEXTURED VERSION) ---
+import streamlit as st
+
+# --- GLOBAL CYBER 4K STYLING (FIXED VERSION) ---
 st.markdown("""
     <style>
     /* 1. DEFINE ANIMASI MOVING MATRIX */
     @keyframes moveGrid {
         0% { transform: translateY(0); }
-        100% { transform: translateY(40px); } /* Bergerak ke bawah */
+        100% { transform: translateY(40px); }
     }
 
-    /* 2. BACKGROUND UTAMA (ABSULUTE BLACK 4K) */
+    /* 2. BACKGROUND UTAMA */
     .stApp {
         background-color: #020617;
         color: #e2e8f0;
         font-family: 'Inter', sans-serif;
-        position: relative;
-        overflow: hidden;
     }
 
-    /* 3. LAYER BG BERGERAK (MOVING GRID PATTERN) */
+    /* 3. LAYER BG BERGERAK (PERBAIKAN DI SINI) */
     .stApp::before {
         content: "";
         position: fixed;
-        top: -100px; left: -100px; right: -100px; bottom: -100px;
+        top: 0; left: 0; right: 0; bottom: 0;
         background-image: 
             linear-gradient(rgba(204, 255, 0, 0.04) 1px, transparent 1px),
             linear-gradient(90deg, rgba(0, 255, 255, 0.02) 1px, transparent 1px);
         background-size: 40px 40px;
         background-position: center;
-        mask-image: radial-gradient(circle, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 80%);
-        -webkit-mask-image: radial-gradient(circle, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 80%);
         
-        /* AKTIFKAN ANIMASI DI SINI */
+        /* Masking agar pinggiran halus */
+        -webkit-mask-image: radial-gradient(circle, rgba(0,0,0,1) 30%, rgba(0,0,0,0) 100%);
+        mask-image: radial-gradient(circle, rgba(0,0,0,1) 30%, rgba(0,0,0,0) 100%);
+        
         animation: moveGrid 8s linear infinite; 
         
-        z-index: 0;
+        /* KUNCI PERBAIKAN: z-index negatif agar di bawah konten */
+        z-index: -1; 
         pointer-events: none;
     }
 
-    /* 4. NEON TYPOGRAPHY (PRO LOOK) */
+    /* 4. NEON TYPOGRAPHY */
     h1, h2, h3 {
         font-family: 'Orbitron', sans-serif !important;
-        text-transform: uppercase;
         background: linear-gradient(90deg, #ccff00, #00ffff);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        text-shadow: 0 0 15px rgba(204, 255, 0, 0.3);
         font-weight: 800;
+    }
+
+    /* 5. GLASSMORPHISM (Pastikan konten terlihat) */
+    div[data-testid="stVerticalBlock"] > div {
+        position: relative;
         z-index: 10;
-        position: relative;
     }
 
-    /* 5. GLASSMORPHISM CONTAINERS (TEBAL & BURAM) */
-    /* Container dinaikkan agar berada di atas moving background */
-    div[data-testid="stMetric"], .stDataFrame, div.stTabs, .stSelectbox {
-        background: rgba(15, 23, 42, 0.6) !important;
-        backdrop-filter: blur(15px);
-        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    div[data-testid="stMetric"], .stDataFrame, div.stTabs, .stSelectbox, .stTextInput {
+        background: rgba(15, 23, 42, 0.8) !important;
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
         border-radius: 12px !important;
-        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6) !important;
-        position: relative;
-        z-index: 20;
     }
 
-    /* 6. BUTTON NEON GLOW */
+    /* 6. BUTTON NEON */
     .stButton>button {
         background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%) !important;
         color: #ccff00 !important;
         border: 1px solid rgba(204, 255, 0, 0.5) !important;
-        transition: 0.3s;
-        text-transform: uppercase;
-        letter-spacing: 2px;
-        z-index: 30;
+        width: 100%;
     }
 
     .stButton>button:hover {
         background: #ccff00 !important;
         color: #000 !important;
-        box-shadow: 0 0 25px rgba(204, 255, 0, 0.6);
-        transform: translateY(-2px);
+        box-shadow: 0 0 20px rgba(204, 255, 0, 0.4);
     }
     </style>
     """, unsafe_allow_html=True)
