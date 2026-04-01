@@ -345,34 +345,78 @@ if menu == "STRATEGY SCANNER":
                 except: pass
             st.rerun()
 
+    # 1. TOMBOL EKSEKUSI
     if st.button("⚡ EXECUTE_DEEP_SCAN", width="stretch"):
         st.session_state.results = run_scan(load_tickers(), mode_scan)
         st.session_state.scan_time = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%H:%M:%S")
 
+    # 2. TAMPILKAN HASIL (Satu blok tunggal agar tidak double)
     if 'results' in st.session_state:
         df = st.session_state.results
         if not df.empty:
             st.caption(f"Last Sync: {st.session_state.scan_time} WIB")
             
-            # TAB VIEW FOR MOBILE OPTIMIZATION
-            tab_desk, tab_mob = st.tabs(["🖥️ DESKTOP VIEW", "📱 MOBILE VIEW"])
-            with tab_desk: st.dataframe(df.drop(columns=['FULL']), use_container_width=True, hide_index=True)
-            with tab_mob: draw_mobile_cards(df)
+            # --- FITUR BARU: TOP 3 PICKS (Ditaruh di atas Tabel) ---
+            st.markdown("### 🌟 TERMINAL_TOP_PICKS")
+            col_a, col_b = st.columns(2)
             
-            sel_t = st.selectbox("FOCUS_TARGET", df['TICKER'].tolist())
+            # Filter Top 3 BSJP
+            top_bsjp = df[df['REKOMENDASI'] == "🚀 BSJP"].sort_values(by='VAL(M)', ascending=False).head(3)
+            with col_a:
+                st.markdown("<div style='background:rgba(204,255,0,0.1); padding:10px; border-radius:5px; border-left:4px solid #ccff00;'>", unsafe_allow_html=True)
+                st.markdown("<p style='color:#ccff00; margin-bottom:5px; font-weight:bold;'>🔥 BEST FOR BSJP</p>", unsafe_allow_html=True)
+                if not top_bsjp.empty:
+                    for _, r in top_bsjp.iterrows():
+                        st.write(f"**{r['TICKER']}** | TP: {r['TP']}")
+                else:
+                    st.caption("No BSJP signal.")
+                st.markdown("</div>", unsafe_allow_html=True)
+
+            # Filter Top 3 HOLD
+            top_hold = df[df['REKOMENDASI'] == "💎 HOLD"].sort_values(by='VAL(M)', ascending=False).head(3)
+            with col_b:
+                st.markdown("<div style='background:rgba(0,255,255,0.1); padding:10px; border-radius:5px; border-left:4px solid #00ffff;'>", unsafe_allow_html=True)
+                st.markdown("<p style='color:#00ffff; margin-bottom:5px; font-weight:bold;'>🏆 BEST FOR HOLD</p>", unsafe_allow_html=True)
+                if not top_hold.empty:
+                    for _, r in top_hold.iterrows():
+                        st.write(f"**{r['TICKER']}** | SL: {r['CL']}")
+                else:
+                    st.caption("No HOLD trend.")
+                st.markdown("</div>", unsafe_allow_html=True)
+            
+            st.markdown("---")
+
+            # --- TAMPILAN TABEL ---
+            tab_desk, tab_mob = st.tabs(["🖥️ DESKTOP VIEW", "📱 MOBILE VIEW"])
+            with tab_desk: 
+                st.dataframe(df.drop(columns=['FULL']), use_container_width=True, hide_index=True)
+            with tab_mob: 
+                draw_mobile_cards(df)
+            
+            # --- BAGIAN CHART (FOCUS TARGET) ---
+            st.markdown("### 📈 FOCUS_TARGET_ANALYSIS")
+            sel_t = st.selectbox("SELECT TICKER FOR CHART", df['TICKER'].tolist())
             full_t = df[df['TICKER'] == sel_t]['FULL'].values[0]
+            
+            # Download data chart
             chart_data = yf.download(full_t, period="6mo", interval="1d", progress=False, auto_adjust=True)
             chart_data.columns = [c[0] if isinstance(c, tuple) else c for c in chart_data.columns]
+            
+            # Tambahkan Indikator MA & RSI untuk Chart Detail
             chart_data['MA20'] = chart_data['Close'].rolling(20).mean()
-            delta = chart_data['Close'].diff(); gain = (delta.where(delta > 0, 0)).rolling(14).mean(); loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+            delta = chart_data['Close'].diff()
+            gain = (delta.where(delta > 0, 0)).rolling(14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
             chart_data['RSI'] = 100 - (100 / (1 + (gain/loss)))
 
+            # Gambar Chart Plotly
             fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_width=[0.2, 0.15, 0.65])
             fig.add_trace(go.Candlestick(x=chart_data.index, open=chart_data['Open'], high=chart_data['High'], low=chart_data['Low'], close=chart_data['Close'], name="Price"), row=1, col=1)
             fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['MA20'], line=dict(color='#ffcc00'), name="MA20"), row=1, col=1)
             fig.add_trace(go.Bar(x=chart_data.index, y=chart_data['Volume'], name="Vol", opacity=0.4), row=2, col=1)
             fig.add_trace(go.Scatter(x=chart_data.index, y=chart_data['RSI'], line=dict(color='#ff00ff'), name="RSI"), row=3, col=1)
-            fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=500, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            
+            fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=600, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
             st.plotly_chart(fig, use_container_width=True)
 
 elif menu == "FUNDAMENTAL ANALYZER":
