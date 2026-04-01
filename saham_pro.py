@@ -77,15 +77,30 @@ def add_to_portfolio(u, t, p, l, tp, cl):
               (u, t.upper().strip(), p, l, tp, cl, datetime.now().strftime("%Y-%m-%d")))
     conn.commit(); conn.close()
 
-def sell_position(u, row_id, ticker, buy_p, sell_p, lots):
-    pnl = (sell_p - buy_p) * lots * 100
-    date_now = datetime.now().strftime("%Y-%m-%d")
-    conn = sqlite3.connect('users.db')
-    c = conn.cursor()
-    c.execute("INSERT INTO history (username, ticker, buy_price, sell_price, lots, pnl, date) VALUES (?, ?, ?, ?, ?, ?, ?)",
-              (u, ticker, buy_p, sell_p, lots, pnl, date_now))
-    c.execute("DELETE FROM portfolio WHERE id=?", (row_id,))
-    conn.commit(); conn.close()
+def sell_position(user_id, portfolio_id, ticker, buy_price, sell_price, sell_qty, current_lots):
+    import sqlite3
+    from datetime import datetime
+    
+    with sqlite3.connect('users.db') as conn:
+        # 1. Catat keuntungan ke tabel History (Realized P/L)
+        # Menghitung profit berdasarkan jumlah lot yang dijual saja
+        profit = (sell_price - buy_price) * sell_qty * 100
+        date_sell = datetime.now().strftime("%Y-%m-%d %H:%M")
+        
+        conn.execute("""
+            INSERT INTO history (user_id, ticker, buy_price, sell_price, lots, profit, date) 
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (user_id, ticker, buy_price, sell_price, sell_qty, profit, date_sell))
+        
+        # 2. Update atau Hapus di tabel Portfolio
+        if sell_qty < current_lots:
+            # JIKA JUAL SEBAGIAN: Kurangi jumlah lot di database
+            conn.execute("UPDATE portfolio SET lots = lots - ? WHERE id = ?", (sell_qty, portfolio_id))
+        else:
+            # JIKA JUAL SEMUA: Hapus baris dari portfolio
+            conn.execute("DELETE FROM portfolio WHERE id = ?", (portfolio_id,))
+        
+        conn.commit()
 
 def get_user_portfolio(u, r):
     conn = sqlite3.connect('users.db')
@@ -907,19 +922,41 @@ elif menu == "MONEY MANAGEMENT":
             st.dataframe(df_display.drop(columns=['username','tp_price','cl_price']), use_container_width=True, hide_index=True)
             
             # Tombol Jual
-            for i, row in df_p.iterrows():
-                with st.expander(f"MANAGE {row['ticker']}"):
-                    cs, cd = st.columns([3, 1])
-                    s_price = cs.number_input(f"Harga Jual {row['ticker']}", value=float(row['Live']), key=f"sell_val_{row['id']}")
-                    if cs.button(f"🚀 SELL {row['ticker']}", key=f"btn_sell_{row['id']}", use_container_width=True):
-                        sell_position(user_now, row['id'], row['ticker'], row['buy_price'], s_price, row['lots'])
-                        st.rerun()
-                    if cd.button("🗑️", key=f"btn_del_port_{row['id']}", use_container_width=True):
-                        with sqlite3.connect('users.db') as conn:
-                            conn.execute("DELETE FROM portfolio WHERE id=?", (row['id'],))
-                        st.rerun()
-        else:
-            st.info("Portfolio kosong.")
+            # Loop Tampilan Portfolio
+        for i, row in df_p.iterrows():
+            with st.expander(f"📈 MANAGE {row['ticker']} ({row['lots']} Lots Available)"):
+                # Baris Input
+                c1, c2, c3 = st.columns([2, 2, 0.5])
+                
+                # Input Harga Jual (Default dari harga Live)
+                s_price = c1.number_input(
+                    "Harga Jual", 
+                    value=float(row['Live']), 
+                    key=f"sell_val_{row['id']}"
+                )
+                
+                # Input Jumlah Lot (Bisa diatur untuk TP 1, TP 2, dst)
+                s_qty = c2.number_input(
+                    "Lot Dijual", 
+                    min_value=1, 
+                    max_value=int(row['lots']), 
+                    value=int(row['lots']), 
+                    key=f"sell_qty_{row['id']}"
+                )
+                
+                # Tombol Hapus (Icon Sampah)
+                if c3.button("🗑️", key=f"btn_del_port_{row['id']}", use_container_width=True):
+                    with sqlite3.connect('users.db') as conn:
+                        conn.execute("DELETE FROM portfolio WHERE id=?", (row['id'],))
+                    st.rerun()
+
+                # Tombol Eksekusi Jual
+                btn_label = f"🚀 SELL {s_qty} LOT" if s_qty < row['lots'] else f"🔥 CLOSE POSITION"
+                if st.button(btn_label, key=f"btn_sell_{row['id']}", use_container_width=True):
+                    # Memanggil fungsi yang sudah diupdate di atas
+                    sell_position(user_now, row['id'], row['ticker'], row['buy_price'], s_price, s_qty, row['lots'])
+                    st.success(f"Berhasil menjual {s_qty} lot {row['ticker']}!")
+                    st.rerun()
 
     # --- TAB 2: TRADING HISTORY ---
     with tab2:
