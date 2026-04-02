@@ -11,6 +11,7 @@ import os
 import requests 
 import pytz 
 
+
 # --- 0. CONFIG & DATABASE SETUP ---
 warnings.filterwarnings("ignore", category=FutureWarning)
 st.set_page_config(page_title="IDX CYBER TERMINAL", page_icon="⚡", layout="wide")
@@ -169,7 +170,7 @@ div[data-testid="stForm"] {
     padding: 30px !important;
 }
 
-/* Label Input (OPERATOR ID / ACCESS KEY) */
+/* Label Input (ID / PASSWORD) */
 div[data-testid="stForm"] label p {
     font-family: 'Orbitron', sans-serif !important;
     color: #ccff00 !important;
@@ -204,6 +205,7 @@ div[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label {
     border-radius: 8px;
     padding: 12px !important;
     transition: 0.3s ease;
+    display: flex !important; /* Tambahan agar teks sejajar */
 }
 
 div[data-testid="stSidebar"] .stRadio label p {
@@ -212,21 +214,24 @@ div[data-testid="stSidebar"] .stRadio label p {
     letter-spacing: 1.5px;
     font-size: 0.8rem !important;
     color: #666 !important;
+    display: block !important; /* Tambahan agar teks TIDAK HILANG */
+    opacity: 1 !important;    /* Tambahan agar teks terlihat jelas */
 }
 
 /* Menu Active */
 div[data-testid="stSidebar"] .stRadio div[role="radiogroup"] [aria-checked="true"] {
     background: rgba(0, 255, 255, 0.1) !important;
-    border: 1px solid rgba(0, 255, 255, 0.5) !important;
+    border: 1px solid #ccff00 !important; /* Ganti ke Neon Lime */
 }
 
 div[data-testid="stSidebar"] .stRadio div[role="radiogroup"] [aria-checked="true"] p {
-    color: #ccff00 !important;
-    text-shadow: 0 0 8px rgba(204, 255, 0, 0.5);
+    color: #ccff00 !important; /* Ganti ke Neon Lime */
+    text-shadow: 0 0 8px rgba(204, 255, 0, 0.8);
 }
 
 /* Hilangkan Dot Radio */
-div[data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label > div:first-child {
+/* Gunakan selektor spesifik agar hanya bulatan yang hilang, teks tetap ada */
+div[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label div:first-child {
     display: none !important;
 }
 
@@ -269,8 +274,8 @@ if not st.session_state["auth"]["logged_in"]:
     with col2:
         st.markdown("<div style='text-align:center; padding:50px 0;'><h1 style='font-size:3rem; margin-bottom:0;'>IDX</h1><p style='color:#888; letter-spacing:5px;'>CYBER TERMINAL</p></div>", unsafe_allow_html=True)
         with st.form("login_form"):
-            u = st.text_input("OPERATOR ID").strip()
-            p = st.text_input("ACCESS KEY", type="password")
+            u = st.text_input("ID").strip()
+            p = st.text_input("PASSWORD", type="password")
             if st.form_submit_button("AUTHORIZE ACCESS", width="stretch"):
                 role = check_login_db(u, p)
                 if role:
@@ -299,8 +304,18 @@ def load_tickers():
 
 def draw_mobile_cards(df):
     for _, row in df.iterrows():
+        # 1. LOGIKA DETEKSI WARNA
         chg = row.get('CHG%', 0)
         chg_color = "#ccff00" if chg > 0 else "#ff4b4b"
+
+        # 2. FIX PENAMAAN KOLOM (Seringkali beda antara TP1 vs TP 1)
+        # Kita buat variabel cadangan agar jika kolom pakai spasi tetap terbaca
+        val_last  = row.get('LAST', '-')
+        val_entry = row.get('ENTRY', row.get('Entry', val_last)) # Default entry = last price
+        val_tp1   = row.get('TP1', row.get('TP 1', '-'))
+        val_tp2   = row.get('TP2', row.get('TP 2', '-'))
+        val_cl    = row.get('CL', row.get('EXIT/CL', row.get('STOP LOSS', '-')))
+        val_m     = row.get('VAL(M)', row.get('VALUE', 0))
 
         st.markdown(f"""
         <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(204, 255, 0, 0.2); 
@@ -308,16 +323,16 @@ def draw_mobile_cards(df):
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <b style="font-size: 1.2rem; color: #ccff00;">{row.get('TICKER','-')}</b>
                 <span style="color: {chg_color}; font-weight: bold;">
-                    {row.get('CHG%',0)}% {row.get('VOL_S','-')}
+                    {chg}% {row.get('VOL_S','')}
                 </span>
             </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; font-size: 0.85rem; color: #bbb;">
-                <div>Last: <b style="color:#fff;">{row.get('LAST','-')}</b></div>
-                <div>Value: <b style="color:#fff;">{row.get('VAL(M)',0)}M</b></div>
-                <div style="color: #00ffff;">Entry: {row.get('ENTRY','-')}</div>
-                <div style="color: #00ff00;">TP1: {row.get('TP1','-')}</div>
-<div style="color: #00ff00;">TP2: {row.get('TP2','-')}</div>
-                <div style="color: #ff4b4b;">CL: {row.get('CL','-')}</div>
+                <div>Last: <b style="color:#fff;">{val_last}</b></div>
+                <div>Value: <b style="color:#fff;">{val_m}M</b></div>
+                <div style="color: #00ffff; font-weight: bold;">Entry: {val_entry}</div>
+                <div style="color: #00ff00; font-weight: bold;">TP1: {val_tp1}</div>
+                <div style="color: #00ff00; font-weight: bold;">TP2: {val_tp2}</div>
+                <div style="color: #ff4b4b; font-weight: bold;">CL: {val_cl}</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -337,7 +352,7 @@ def run_scan(tickers, mode):
         min_chg, min_rsi, min_val, vol_m = 1.5, 45, 100_000_000, 1.1
     elif mode == "Profesional":
         min_chg, min_rsi, min_val, vol_m = 2.5, 55, 1_000_000_000, 1.4
-    elif mode == "Ketat":
+    elif mode == "Pro":
         min_chg, min_rsi, min_val, vol_m = 4.0, 60, 2_000_000_000, 1.8
     else:
         min_chg, min_rsi, min_val, vol_m = 2.0, 50, 500_000_000, 1.3
@@ -393,14 +408,23 @@ def run_scan(tickers, mode):
             vol_avg = df['Volume'].rolling(20).mean().iloc[-1]
             is_breakout = (c_now > high_20) and (df['Volume'].iloc[-1] > vol_avg * vol_m)
 
-            # --- FILTER UTAMA ---
+# --- FILTER UTAMA ---
             # Jika tidak masuk kriteria minimal, lewati (Cegah Tabel Dobel/Sampah)
             if chg < min_chg or val_tr < min_val:
                 continue
 
+            # --- KALKULASI TRADING PLAN (TAMBAHAN BARU) ---
+            # TP 1: Target Profit 1 (+3% dari harga sekarang)
+            # TP 2: Target Profit 2 (+7% dari harga sekarang)
+            # EXIT/CL: Batas Rugi (-3% dari harga sekarang)
+            tp1 = int(c_now * 1.03)
+            tp2 = int(c_now * 1.07)
+            cl = int(c_now * 0.97)
+
             # Scoring AI
             score = (chg * 0.4) + (rsi * 0.2) + ((val_tr / 1e9) * 0.2) + (10 if is_breakout else 0)
 
+            # --- PENYUSUNAN HASIL ---
             results.append({
                 "TICKER": t.replace(".JK", ""),
                 "LAST": int(c_now),
@@ -410,6 +434,12 @@ def run_scan(tickers, mode):
                 "AI_SCORE": round(score, 2),
                 "BREAKOUT": "YES" if is_breakout else "NO",
                 "REKOMENDASI": "🚀 BSJP" if chg > 4 else "💎 HOLD" if c_now > ma20 else "🔎 WATCH",
+                
+                # Masukkan data TP & CL ke list
+                "TP 1": tp1,
+                "TP 2": tp2,
+                "EXIT/CL": cl,
+                
                 "FULL": t
             })
         except:
@@ -429,9 +459,71 @@ role = st.session_state["auth"]["role"]
 user_now = st.session_state["auth"]["user"]
 last_l, ip_l, loc_l = get_sidebar_log(user_now)
 
+# CSS KHUSUS UNTUK MEMUNCULKAN TEKS & WARNA NEON LIME
+st.sidebar.markdown("""
+<style>
+    /* 1. Judul COMMAND CENTER */
+    [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {
+        color: #ccff00 !important;
+        font-family: 'Orbitron', sans-serif !important;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        font-weight: bold;
+    }
+
+    /* 2. Kotak Menu Radio */
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label {
+        background: rgba(255, 255, 255, 0.03) !important;
+        border: 1px solid rgba(0, 255, 255, 0.1) !important;
+        border-radius: 8px !important;
+        padding: 10px 15px !important;
+        margin-bottom: 8px !important;
+        display: flex !important;
+        align-items: center !important;
+        min-height: 45px !important;
+    }
+
+    /* 3. MEMAKSA TEKS MENU MUNCUL JELAS */
+    /* Kita targetkan div pembungkus teksnya langsung */
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label div[data-testid="stMarkdownContainer"] p {
+        color: #888888 !important; /* Warna abu-abu saat tidak dipilih */
+        font-family: 'Orbitron', sans-serif !important;
+        font-size: 0.85rem !important;
+        text-transform: uppercase !important;
+        margin-left: 0px !important;
+        visibility: visible !important;
+        display: block !important;
+    }
+
+    /* 4. WARNA AKTIF (NEON LIME) */
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:has(input:checked) {
+        border: 1px solid #ccff00 !important;
+        background: rgba(204, 255, 0, 0.1) !important;
+        box-shadow: 0 0 10px rgba(204, 255, 0, 0.2);
+    }
+
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:has(input:checked) div[data-testid="stMarkdownContainer"] p {
+        color: #ccff00 !important; /* Teks jadi Hijau Neon */
+        text-shadow: 0 0 8px rgba(204, 255, 0, 0.8) !important;
+        font-weight: bold !important;
+    }
+
+    /* 5. SEMBUNYIKAN HANYA BULATANNYA (Bukan Teksnya) */
+    /* Cara paling aman: buat ukurannya 0 agar tidak memakan tempat */
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label > div:first-child {
+        width: 0px !important;
+        height: 0px !important;
+        margin: 0px !important;
+        padding: 0px !important;
+        visibility: hidden !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Profile Card di Sidebar
 st.sidebar.markdown(f"""
     <div style='padding:15px; border:1px solid #ccff0033; border-radius:10px; background:rgba(204,255,0,0.05); margin-bottom:10px;'>
-        <h3 style='margin:0; color:#ccff00;'>{user_now.upper()}</h3>
+        <h3 style='margin:0; color:#ccff00; font-family:Orbitron;'>{user_now.upper()}</h3>
         <p style='margin:0; font-size:10px; color:#888;'>NODE ACTIVE | {role.upper()}</p>
         <hr style='border:0.1px solid #ccff0022; margin:10px 0;'>
         <p style='font-size:10px; color:#888;'>LST: {last_l}</p>
@@ -440,21 +532,33 @@ st.sidebar.markdown(f"""
     </div>
     """, unsafe_allow_html=True)
 
-menu_list = ["STRATEGY SCANNER", "FUNDAMENTAL ANALYZER", "TICKER COMPARISON", "MARKET_NEWS", "MONEY MANAGEMENT", "SECURITY SETTINGS"]
-if role == "admin": menu_list.insert(1, "USER MANAGEMENT")
-menu = st.sidebar.radio("COMMAND CENTER", menu_list)
+# List Menu
+menu_list = ["SCANNER", "FUNDAMENTAL", "TICKER COMPARISON", "MARKET_NEWS", "MONEY MANAGEMENT", "SECURITY SETTINGS"]
+if role == "admin": 
+    menu_list.insert(1, "USER MANAGEMENT")
 
-if st.sidebar.button("🔴 TERMINATE SESSION", width="stretch"):
-    st.session_state["auth"] = {"logged_in": False}; st.rerun()
+# Panggil Radio Button (Gunakan label kosong "" agar judul COMMAND CENTER tidak double)
+########st.sidebar.markdown("<p style='color:#ccff00; font-weight:bold; letter-spacing:2px; margin-bottom:-15px;'>COMMAND CENTER</p>", unsafe_allow_html=True)
+menu = st.sidebar.radio("Menu", menu_list, label_visibility="collapsed")
+
+st.sidebar.write("---")
+if st.sidebar.button("🔴 TERMINATE SESSION", use_container_width=True):
+    st.session_state["auth"] = {"logged_in": False}
+    st.rerun()
 
 # --- 5. CONTENT AREA: STRATEGY SCANNER ---
-if menu == "STRATEGY SCANNER":
+if menu == "SCANNER":
     st.title("🛰️ MARKET_INTELLIGENCE")
     st.info("📊 Scan optimal saat jam market (09:00 - 15:00 WIB)")
 
-    # 🔍 DEBUG TICKER
+    # 1. INISIALISASI SESSION STATE
+    if 'results' not in st.session_state:
+        st.session_state.results = None
+    if 'scan_time' not in st.session_state:
+        st.session_state.scan_time = "Ready"
+
+    # 🔍 LOAD TICKERS
     tickers = load_tickers()
-    st.write("Jumlah ticker:", len(tickers))
     
     # =========================
     # 1. IHSG MONITOR
@@ -473,198 +577,129 @@ if menu == "STRATEGY SCANNER":
     except:
         pass
 
-# =========================
-# CONTROL PANEL
-# =========================
-c1, c2 = st.columns([4,1])
+    # =========================
+    # 2. CONTROL PANEL
+    # =========================
+    c1, c2 = st.columns([4,1])
+    with c1:
+        mode_scan = st.radio("ALGO_SENSITIVITY", ["Santai", "Profesional", "Pro"], horizontal=True, key="ms_main")
+    with c2:
+        if st.button("🔄 REFRESH", use_container_width=True):
+            st.rerun()
 
-with c1:
-    mode_scan = st.radio(
-        "ALGO_SENSITIVITY",
-        ["Santai", "Profesional", "Ketat"],
-        horizontal=True,
-        key="mode_scan_main"
-    )
-
-with c2:
-    if st.button("🔄 REFRESH", use_container_width=True):
-        st.rerun()
-
-
-# =========================
-# BUTTON SCAN
-# =========================
-if st.button("⚡ EXECUTE_DEEP_SCAN", use_container_width=True):
-
-    # Loading sederhana
-    progress = st.progress(0)
-    for i in range(100):
-        progress.progress(i + 1)
-
-    # Jalankan scan
-    result = run_scan(tickers, mode_scan)
-
-    progress.empty()
-
-    # Simpan hasil
-    st.session_state.results = result
-    st.session_state.scan_time = datetime.now().strftime("%H:%M:%S")
-
-
-# 3. Hasil Analisis (Dashboard & Tabel)
-if 'results' in st.session_state:
-    df = st.session_state.results
-
-    # ✅ TAMBAHKAN DI SINI
-    st.markdown(f"""
-    <div style='
-        background: rgba(0,255,0,0.05);
-        padding:10px;
-        border-left:5px solid #00ff00;
-        margin-bottom:10px;
-    '>
-    🧠 AI STATUS: <b>SCAN COMPLETE</b><br>
-    ⏱ TIME: {st.session_state.scan_time}<br>
-    📊 DATA: {len(st.session_state.results)} STOCKS ANALYZED
-    </div>
-    """, unsafe_allow_html=True)
-
-    if df is None or df.empty:
-        st.warning("⚠️ Tidak ada saham lolos filter (coba mode Agresif / jam market)")
-    else:
-        st.success(f"✅ Ditemukan {len(df)} saham potensial")
-        st.caption(f"Last Sync: {st.session_state.scan_time} WIB")
-
-        # 🔥 AI TOP PICKS
-        st.markdown("### 🔥 TOP AI PICKS")
-        top3 = df.head(3)
-        st.dataframe(top3, use_container_width=True, hide_index=True)
-
-        # =========================
-        # 🧠 AI SCORING SAFE
-        # =========================
-        for col in ['CHG%', 'RSI', 'VAL(M)']:
-            if col not in df.columns:
-                df[col] = 0
-
-        df['AI_SCORE'] = (
-            df['CHG%'] * 0.4 +
-            df['RSI'] * 0.3 +
-            df['VAL(M)'] * 0.3
-        )
-
-        # =========================
-        # 🧠 AI TOP PICKS
-        # =========================
-        st.markdown("### 🧠 AI TOP PICKS")
-        top3 = df.sort_values(by='AI_SCORE', ascending=False).head(3)
-        st.dataframe(top3, use_container_width=True, hide_index=True)
-
-        # =========================
-        # 🔥 BREAKOUT HUNTER
-        # =========================
-        st.markdown("### 🔥 BREAKOUT HUNTER")
-
-        if 'BREAKOUT' in df.columns:
-            df_bo = df[df['BREAKOUT'] == "YES"]
+    # =========================
+    # 3. BUTTON SCAN
+    # =========================
+    if st.button("⚡ EXECUTE_DEEP_SCAN", use_container_width=True):
+        res = run_scan(tickers, mode_scan)
+        if res is not None and not res.empty:
+            st.session_state.results = res
+            st.session_state.scan_time = datetime.now().strftime("%H:%M:%S")
+            st.rerun()
         else:
-            df_bo = pd.DataFrame()
+            st.warning("Scan selesai, tapi tidak ada saham yang lolos filter.")
 
-        if not df_bo.empty:
-            st.dataframe(df_bo, use_container_width=True, hide_index=True)
+    # =========================
+    # 4. HASIL ANALISIS (PROTECTED BLOCK)
+    # =========================
+    if st.session_state.results is not None:
+        df = st.session_state.results
+        
+        # --- AI STATUS HEADER ---
+        st.markdown(f"""
+        <div style='background: rgba(0,255,0,0.05); padding:15px; border-left:5px solid #00ff00; margin-bottom:20px; border-radius:0 10px 10px 0;'>
+            <span style='color:#00ff00; font-weight:bold;'>🧠 AI STATUS: SCAN COMPLETE</span><br>
+            <span style='font-size:12px; color:#888;'>⏱ TIME: {st.session_state.scan_time} | 📊 DATA: {len(df)} STOCKS ANALYZED</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if df.empty:
+            st.warning("⚠️ Tidak ada saham lolos filter (coba mode Santai / jam market)")
         else:
-            st.info("No breakout detected")
+            # --- AI SCORING CALCULATION ---
+            for col in ['CHG%', 'RSI', 'VAL(M)']:
+                if col not in df.columns: df[col] = 0
+            
+            df['AI_SCORE'] = (df['CHG%'] * 0.4 + df['RSI'] * 0.3 + (df['VAL(M)']/100) * 0.3)
 
+            # --- AI TOP PICKS & BREAKOUT ---
+            col_picks, col_bo = st.columns(2)
+            with col_picks:
+                st.markdown("### 🧠 AI TOP PICKS")
+                top3 = df.sort_values(by='AI_SCORE', ascending=False).head(3)
+                st.dataframe(top3[['TICKER', 'LAST', 'AI_SCORE']], use_container_width=True, hide_index=True)
+            
+            with col_bo:
+                st.markdown("### 🔥 BREAKOUT")
+                if 'BREAKOUT' in df.columns:
+                    df_bo = df[df['BREAKOUT'] == "YES"].head(3)
+                    if not df_bo.empty:
+                        st.dataframe(df_bo[['TICKER', 'LAST', 'CHG%']], use_container_width=True, hide_index=True)
+                    else:
+                        st.info("No breakout")
 
-        # =========================
-        # 🌟 STRATEGY INSIGHT
-        # =========================
-        st.markdown("### 🌟 STRATEGY_INSIGHT")
-        col_a, col_b = st.columns(2)
+            # --- STRATEGY INSIGHT (METRICS) ---
+            st.markdown("### 🌟 STRATEGY_INSIGHT")
+            col_a, col_b = st.columns(2)
+            with col_a:
+                st.markdown("<p style='color:#ccff00; font-weight:bold;'>🚀 TOP BUY</p>", unsafe_allow_html=True)
+                df_buy = df[df['REKOMENDASI'].str.contains("BUY|BSJP", na=False)].head(3)
+                if not df_buy.empty:
+                    m_cols = st.columns(len(df_buy))
+                    for idx, (_, r) in enumerate(df_buy.iterrows()):
+                        m_cols[idx].metric(r['TICKER'], int(r['LAST']), f"{r['CHG%']}%")
+                else: st.info("No strong buy")
 
-        with col_a:
-            st.markdown("<p style='color:#ccff00; font-weight:bold;'>🚀 TOP BUY</p>", unsafe_allow_html=True)
+            with col_b:
+                st.markdown("<p style='color:#00ffff; font-weight:bold;'>💎 TOP HOLD</p>", unsafe_allow_html=True)
+                df_hold = df[df['REKOMENDASI'].str.contains("HOLD", na=False)].head(3)
+                if not df_hold.empty:
+                    m_cols = st.columns(len(df_hold))
+                    for idx, (_, r) in enumerate(df_hold.iterrows()):
+                        m_cols[idx].metric(r['TICKER'], int(r['LAST']), f"RSI {r['RSI']}")
+                else: st.info("No hold trend")
 
-            df_buy = df[df['REKOMENDASI'].str.contains("BUY|BSJP", na=False)].head(3)
+            # --- VIEW TABS ---
+            st.markdown("---")
+            tab1, tab2, tab3 = st.tabs(["🖥️ DESKTOP", "📱 MOBILE", "📈 CHART"])
 
-            if not df_buy.empty:
-                m_cols = st.columns(len(df_buy))
-                for idx, (_, r) in enumerate(df_buy.iterrows()):
-                    m_cols[idx].metric(r['TICKER'], int(r['LAST']), f"{r['CHG%']}%")
-            else:
-                st.info("No strong buy")
+            with tab1:
+                st.dataframe(df.drop(columns=['FULL'], errors='ignore'), use_container_width=True, hide_index=True)
 
-        with col_b:
-            st.markdown("<p style='color:#00ffff; font-weight:bold;'>💎 TOP HOLD</p>", unsafe_allow_html=True)
+            with tab2:
+                draw_mobile_cards(df)
 
-            df_hold = df[df['REKOMENDASI'].str.contains("HOLD", na=False)].head(3)
+            with tab3:
+                st.markdown("### 📈 FOCUS_TARGET_ANALYSIS")
+                sel_t = st.selectbox("PILIH SAHAM", df['TICKER'].tolist())
+                full_t = df[df['TICKER'] == sel_t]['FULL'].values[0]
+                c_data = yf.download(full_t, period="6mo", interval="1d", progress=False)
+                if not c_data.empty:
+                    c_data.columns = [c[0] if isinstance(c, tuple) else c for c in c_data.columns]
+                    fig = go.Figure(data=[go.Candlestick(
+                        x=c_data.index, open=c_data['Open'], high=c_data['High'],
+                        low=c_data['Low'], close=c_data['Close']
+                    )])
+                    fig.update_layout(template="plotly_dark", height=400, margin=dict(l=0,r=0,t=0,b=0), xaxis_rangeslider_visible=False)
+                    st.plotly_chart(fig, use_container_width=True)
 
-            if not df_hold.empty:
-                m_cols = st.columns(len(df_hold))
-                for idx, (_, r) in enumerate(df_hold.iterrows()):
-                    m_cols[idx].metric(r['TICKER'], int(r['LAST']), f"RSI {r['RSI']}")
-            else:
-                st.info("No hold trend")
-
-        st.markdown("---")
-
-        # =========================
-        # TABLE VIEW
-        # =========================
-        tab1, tab2 = st.tabs(["🖥️ DESKTOP", "📱 MOBILE"])
-
-        with tab1:
-            st.dataframe(df.drop(columns=['FULL'], errors='ignore'),
-                         use_container_width=True,
-                         hide_index=True)
-
-        with tab2:
-            draw_mobile_cards(df)
-
-        # =========================
-        # 📈 CHART ANALYSIS
-        # =========================
-        st.markdown("### 📈 FOCUS_TARGET_ANALYSIS")
-
-        sel_t = st.selectbox("PILIH SAHAM", df['TICKER'].tolist())
-        full_t = df[df['TICKER'] == sel_t]['FULL'].values[0]
-
-        c_data = yf.download(full_t, period="6mo", interval="1d", progress=False)
-
-        if not c_data.empty:
-            c_data.columns = [c[0] if isinstance(c, tuple) else c for c in c_data.columns]
-
-            fig = go.Figure(data=[go.Candlestick(
-                x=c_data.index,
-                open=c_data['Open'],
-                high=c_data['High'],
-                low=c_data['Low'],
-                close=c_data['Close']
-            )])
-
-            fig.update_layout(
-                template="plotly_dark",
-                height=450,
-                margin=dict(l=0, r=0, t=0, b=0),
-                xaxis_rangeslider_visible=False
-            )
-
-            st.plotly_chart(fig, use_container_width=True)
-
-elif menu == "FUNDAMENTAL ANALYZER":
-    # --- CUSTOM CSS UNTUK TAMPILAN TERMINAL PRO ---
+elif menu == "FUNDAMENTAL":
     st.markdown("""
         <style>
-        .reportview-container { background: #0e1117; }
-        .stMetric {
-            background: rgba(0,255,255,0.05);
-            padding: 10px;
-            border-radius: 5px;
-            border-bottom: 2px solid #00ffff;
+        /* Mengubah warna Metric agar senada dengan Neon Lime */
+        [data-testid="stMetricSimpleValue"] {
+            color: #ccff00 !important;
         }
-        div[data-testid="stExpander"] {
-            border: none !important;
-            background: rgba(255,255,255,0.02) !important;
+        .stMetric {
+            background: rgba(204, 255, 0, 0.03) !important;
+            border-radius: 10px !important;
+            border: 1px solid rgba(204, 255, 0, 0.1) !important;
+            border-left: 5px solid #ccff00 !important; /* Aksen garis di kiri */
+        }
+        /* Menghaluskan tampilan Expander */
+        .streamlit-expanderHeader {
+            color: #ccff00 !important;
+            background-color: transparent !important;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -1150,7 +1185,7 @@ elif menu == "USER MANAGEMENT":
 elif menu == "SECURITY SETTINGS":
     st.title("🔒 SECURITY_VAULT")
     with st.form("p"):
-        new_p = st.text_input("NEW ACCESS KEY", type="password")
+        new_p = st.text_input("NEW PASSWROD", type="password")
         if st.form_submit_button("UPDATE"):
             if update_password_db(user_now, new_p): st.success("Updated")
 
