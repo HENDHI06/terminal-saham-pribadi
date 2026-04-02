@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime
 import sqlite3
+import time
 import warnings
 import os
 import requests 
@@ -77,15 +78,23 @@ def add_to_portfolio(u, t, p, l, tp, cl):
               (u, t.upper().strip(), p, l, tp, cl, datetime.now().strftime("%Y-%m-%d")))
     conn.commit(); conn.close()
 
-def sell_position(u, row_id, ticker, buy_p, sell_p, lots):
-    pnl = (sell_p - buy_p) * lots * 100
-    date_now = datetime.now().strftime("%Y-%m-%d")
-    conn = sqlite3.connect('users.db')
-    c = conn.cursor()
-    c.execute("INSERT INTO history (username, ticker, buy_price, sell_price, lots, pnl, date) VALUES (?, ?, ?, ?, ?, ?, ?)",
-              (u, ticker, buy_p, sell_p, lots, pnl, date_now))
-    c.execute("DELETE FROM portfolio WHERE id=?", (row_id,))
-    conn.commit(); conn.close()
+def sell_position(u, row_id, ticker, buy_p, sell_p, total_lots, sold_lots):
+    pnl = (sell_p - buy_p) * sold_lots * 100
+    with sqlite3.connect('users.db') as conn:
+        # 1. Catat ke History
+        conn.execute("INSERT INTO history (username, ticker, buy_price, sell_price, lots, pnl, date) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                  (u, ticker, buy_p, sell_p, sold_lots, pnl, datetime.now().strftime("%Y-%m-%d")))
+        
+        # 2. Update atau Hapus di Portfolio
+        remaining_lots = total_lots - sold_lots
+        if remaining_lots > 0:
+            # Jika masih ada sisa, update jumlah lot
+            conn.execute("UPDATE portfolio SET lots = ? WHERE id = ?", (remaining_lots, row_id))
+            return f"✅ PARTIAL_SELL: {sold_lots} Lots of {ticker} Sold!"
+        else:
+            # Jika habis, hapus dari portfolio
+            conn.execute("DELETE FROM portfolio WHERE id = ?", (row_id))
+            return f"🔥 FULL_SELL: {ticker} Position Closed!"
 
 def get_user_portfolio(u, r):
     conn = sqlite3.connect('users.db')
@@ -120,59 +129,136 @@ def update_password_db(u, new_p):
 
 init_db()
 
-# --- 1. PRO CYBER STYLING (FIXED SIDEBAR BUTTON) ---
+# --- 1. PRO CYBER STYLING (ULTIMATE UPGRADE) ---
 st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@400;900&display=swap');
-    
-    [data-testid="stHeaderActionElements"], .stDeployButton, #MainMenu {
-        display: none !important;
-    }
-    
-    header { background-color: transparent !important; }
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@400;700;900&display=swap');
 
-    .stApp {
-        background-color: #05070a;
-        background-image: 
-            linear-gradient(rgba(204, 255, 0, 0.02) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(204, 255, 0, 0.02) 1px, transparent 1px),
-            linear-gradient(rgba(204, 255, 0, 0.05) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(204, 255, 0, 0.05) 1px, transparent 1px),
-            radial-gradient(circle at center, rgba(10, 25, 47, 0.4), #05070a);
-        background-size: 20px 20px, 20px 20px, 100px 100px, 100px 100px, 100% 100%;
-        font-family: 'JetBrains Mono', monospace;
-        color: #e0e0e0;
-    }
+/* ===== BACKGROUND & BASE ===== */
+.stApp {
+    background: radial-gradient(circle at center, #0a1321, #05070a);
+    background-attachment: fixed;
+    font-family: 'JetBrains Mono', monospace;
+    color: #e0e0e0;
+}
 
-    div[data-testid="stMetric"], .status-box, .stDataFrame, div[data-testid="stExpander"], .stTabs, .stForm {
-        background: rgba(0, 10, 20, 0.5) !important;
-        backdrop-filter: blur(12px);
-        border: 1px solid rgba(204, 255, 0, 0.15) !important;
-        border-radius: 10px !important;
-    }
+/* ===== HEADER CLEAN ===== */
+header {background: transparent !important;}
+[data-testid="stHeaderActionElements"], .stDeployButton, #MainMenu {
+    display: none !important;
+}
 
-    h1 {
-        font-family: 'Orbitron', sans-serif;
-        background: linear-gradient(90deg, #ccff00, #00ffff);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-    }
+/* ===== TITLE & TEXT ===== */
+h1 {
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 900;
+    background: linear-gradient(90deg, #ccff00, #00ffff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+}
+h2, h3 { color: #00ffff; font-family: 'Orbitron', sans-serif; }
 
-    button[kind="header"] { color: #ccff00 !important; }
+/* ===== LOGIN SCREEN CUSTOM ===== */
+/* Kotak Form Login */
+div[data-testid="stForm"] {
+    border: 2px solid rgba(0, 255, 255, 0.2) !important;
+    box-shadow: 0 0 20px rgba(0, 255, 255, 0.05);
+    background: rgba(10, 20, 30, 0.8) !important;
+    padding: 30px !important;
+}
 
-    /* Tabs Styling */
-    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
-    .stTabs [data-baseweb="tab"] {
-        background-color: rgba(204, 255, 0, 0.05) !important;
-        border-radius: 5px 5px 0px 0px;
-        color: #888 !important;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: rgba(204, 255, 0, 0.15) !important;
-        color: #ccff00 !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+/* Label Input (OPERATOR ID / ACCESS KEY) */
+div[data-testid="stForm"] label p {
+    font-family: 'Orbitron', sans-serif !important;
+    color: #ccff00 !important;
+    font-size: 0.8rem !important;
+    letter-spacing: 2px;
+}
+
+/* Kotak Input Login */
+div[data-testid="stForm"] input {
+    background: rgba(0, 0, 0, 0.5) !important;
+    border: 1px solid rgba(0, 255, 255, 0.3) !important;
+    color: #00ffff !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    height: 45px;
+}
+div[data-testid="stForm"] input:focus {
+    border-color: #ccff00 !important;
+    box-shadow: 0 0 10px rgba(204, 255, 0, 0.2);
+}
+
+/* ===== SIDEBAR MENU ===== */
+[data-testid="stSidebar"] {
+    background: rgba(5, 12, 25, 0.98);
+    border-right: 1px solid rgba(0,255,255,0.1);
+}
+
+/* Menu Radio Button */
+div[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(0, 255, 255, 0.05);
+    margin-bottom: 8px;
+    border-radius: 8px;
+    padding: 12px !important;
+    transition: 0.3s ease;
+}
+
+div[data-testid="stSidebar"] .stRadio label p {
+    font-family: 'Orbitron', sans-serif !important;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    font-size: 0.8rem !important;
+    color: #666 !important;
+}
+
+/* Menu Active */
+div[data-testid="stSidebar"] .stRadio div[role="radiogroup"] [aria-checked="true"] {
+    background: rgba(0, 255, 255, 0.1) !important;
+    border: 1px solid rgba(0, 255, 255, 0.5) !important;
+}
+
+div[data-testid="stSidebar"] .stRadio div[role="radiogroup"] [aria-checked="true"] p {
+    color: #ccff00 !important;
+    text-shadow: 0 0 8px rgba(204, 255, 0, 0.5);
+}
+
+/* Hilangkan Dot Radio */
+div[data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label > div:first-child {
+    display: none !important;
+}
+
+/* ===== UNIVERSAL COMPONENT ===== */
+div[data-testid="stMetric"], .stDataFrame, .stTabs, div[data-testid="stExpander"] {
+    background: rgba(255,255,255,0.03) !important;
+    border: 1px solid rgba(0,255,255,0.15) !important;
+    border-radius: 12px !important;
+}
+
+/* Button Global */
+.stButton>button {
+    background: linear-gradient(90deg, #00ffff, #ccff00);
+    color: #000 !important;
+    border-radius: 6px;
+    border: none;
+    font-family: 'Orbitron', sans-serif;
+    font-weight: bold;
+    text-transform: uppercase;
+    transition: 0.3s;
+}
+.stButton>button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 255, 255, 0.4);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-thumb { background: #00ffff; border-radius: 10px; }
+
+</style>
+""", unsafe_allow_html=True)
 
 # --- 2. AUTHENTICATION ---
 if "auth" not in st.session_state:
@@ -454,29 +540,6 @@ if 'results' in st.session_state:
         top3 = df.head(3)
         st.dataframe(top3, use_container_width=True, hide_index=True)
 
-        # 🔥 BREAKOUT HUNTER
-        st.markdown("### 🔥 BREAKOUT HUNTER")
-        df_bo = df[df['BREAKOUT'] == "YES"]
-
-        if not df_bo.empty:
-            st.dataframe(df_bo, use_container_width=True, hide_index=True)
-        else:
-            st.info("No breakout detected")
-
-        # 🧠 ELITE PICKS
-        st.markdown("### 🧠 ELITE PICKS")
-        elite = df[df['AI_SCORE'] > df['AI_SCORE'].mean()].head(5)
-        st.dataframe(elite, use_container_width=True, hide_index=True)
-
-        st.markdown("---")
-
-        # 📊 FULL TABLE
-        st.markdown("### 📊 FULL RESULT")
-        st.dataframe(df, use_container_width=True, hide_index=True)
-
-        df = st.session_state.results.copy()
-        st.caption(f"Last Sync: {st.session_state.scan_time} WIB")
-
         # =========================
         # 🧠 AI SCORING SAFE
         # =========================
@@ -512,17 +575,6 @@ if 'results' in st.session_state:
         else:
             st.info("No breakout detected")
 
-        # =========================
-        # 🧠 ELITE PICKS
-        # =========================
-        st.markdown("### 🧠 ELITE PICKS")
-
-        elite = df[df['AI_SCORE'] > df['AI_SCORE'].mean()].head(5)
-
-        if not elite.empty:
-            st.dataframe(elite, use_container_width=True, hide_index=True)
-        else:
-            st.info("No elite picks")
 
         # =========================
         # 🌟 STRATEGY INSIGHT
@@ -945,7 +997,6 @@ elif menu == "MONEY MANAGEMENT":
                 
                 if submit_add:
                     if t_in and p_in > 0:
-                        # Fungsi add_to_portfolio dipanggil di sini
                         add_to_portfolio(user_now, t_in, p_in, l_in, 0, 0)
                         st.success(f"Berhasil menambahkan {t_in.upper()}")
                         st.rerun()
@@ -958,7 +1009,8 @@ elif menu == "MONEY MANAGEMENT":
             # Ambil harga live
             tickers_jk = [f"{t}.JK" for t in df_p['ticker'].unique()]
             try:
-                live_data = yf.download(tickers_jk, period="1d", progress=False)['Close']
+                # Menggunakan threads=True agar lebih cepat untuk banyak ticker
+                live_data = yf.download(tickers_jk, period="1d", progress=False, threads=True)['Close']
                 if len(tickers_jk) > 1:
                     live_prices = live_data.iloc[-1].to_dict()
                 else:
@@ -968,15 +1020,18 @@ elif menu == "MONEY MANAGEMENT":
 
             def calc_active(row):
                 tk = f"{row['ticker']}.JK"
+                # Fallback ke buy_price jika harga live gagal fetch
                 curr = live_prices.get(tk, row['buy_price'])
-                if isinstance(curr, (pd.Series, pd.DataFrame)): curr = curr.iloc[0]
+                if isinstance(curr, (pd.Series, pd.DataFrame)): 
+                    curr = curr.iloc[-1] if not curr.empty else row['buy_price']
+                
                 cost = float(row['buy_price'] * row['lots'] * 100)
                 val = float(curr * row['lots'] * 100)
                 return pd.Series([float(curr), cost, val, (val-cost)])
 
             df_p[['Live', 'Cost', 'Value', 'P/L']] = df_p.apply(calc_active, axis=1)
             
-            # Metrics
+            # Metrics (Top Row)
             m1, m2, m3 = st.columns(3)
             t_inv = df_p['Cost'].sum()
             t_pl = df_p['P/L'].sum()
@@ -989,7 +1044,7 @@ elif menu == "MONEY MANAGEMENT":
             fig_pie.update_layout(template="plotly_dark", height=300, paper_bgcolor='rgba(0,0,0,0)', showlegend=True)
             st.plotly_chart(fig_pie, use_container_width=True)
 
-            # Tabel (Privacy Mode aware)
+            # Tabel Ringkasan
             df_display = df_p.copy()
             if privacy_mode:
                 for col in ['buy_price', 'Live', 'Cost', 'Value', 'P/L']:
@@ -997,20 +1052,47 @@ elif menu == "MONEY MANAGEMENT":
             
             st.dataframe(df_display.drop(columns=['username','tp_price','cl_price']), use_container_width=True, hide_index=True)
             
-            # Tombol Jual
+            st.markdown("---")
+            st.subheader("🛠️ POSITION MANAGER")
+            
+            # Fitur Jual (PARTIAL SELL SUPPORT)
             for i, row in df_p.iterrows():
-                with st.expander(f"MANAGE {row['ticker']}"):
-                    cs, cd = st.columns([3, 1])
-                    s_price = cs.number_input(f"Harga Jual {row['ticker']}", value=float(row['Live']), key=f"sell_val_{row['id']}")
-                    if cs.button(f"🚀 SELL {row['ticker']}", key=f"btn_sell_{row['id']}", use_container_width=True):
-                        sell_position(user_now, row['id'], row['ticker'], row['buy_price'], s_price, row['lots'])
+                with st.expander(f"📦 {row['ticker']} | {int(row['lots'])} Lots Available"):
+                    c_price, c_lots, c_btn = st.columns([2, 2, 1])
+                    
+                    # 1. Input Harga Jual
+                    s_price = c_price.number_input(f"Sell Price", value=float(row['Live']), key=f"s_prc_{row['id']}")
+                    
+                    # 2. Input Jumlah Lot (Maksimal sebanyak yang dimiliki)
+                    s_lots = c_lots.number_input(f"Lots to Sell", min_value=1, max_value=int(row['lots']), value=int(row['lots']), key=f"s_lot_{row['id']}")
+                    
+                    # 3. Tombol Eksekusi
+                    st.write("") # Spacer
+                    if c_btn.button(f"EXECUTE SELL", key=f"btn_s_{row['id']}", use_container_width=True):
+                        # Panggil fungsi sell_position dengan parameter sold_lots baru
+                        msg = sell_position(user_now, row['id'], row['ticker'], row['buy_price'], s_price, row['lots'], s_lots)
+                        st.toast(msg) # Notifikasi kecil di pojok
+                        time.sleep(1)
                         st.rerun()
-                    if cd.button("🗑️", key=f"btn_del_port_{row['id']}", use_container_width=True):
+                    
+                    # Tombol Delete (Hapus tanpa hitung P/L)
+                    if st.button(f"🗑️ Delete Data {row['ticker']}", key=f"btn_del_{row['id']}"):
                         with sqlite3.connect('users.db') as conn:
                             conn.execute("DELETE FROM portfolio WHERE id=?", (row['id'],))
                         st.rerun()
         else:
-            st.info("Portfolio kosong.")
+            st.info("Portfolio kosong. Mulai dengan menambahkan posisi baru!")
+
+    # --- TAB 2: TRADING HISTORY ---
+    with tab2:
+        # Implementasi Trading History kamu di sini
+        st.subheader("📜 TRADING_LOG")
+        with sqlite3.connect('users.db') as conn:
+            df_hist = pd.read_sql_query("SELECT * FROM history WHERE username=?", conn, params=(user_now,))
+            if not df_hist.empty:
+                st.dataframe(df_hist.sort_values('date', ascending=False), use_container_width=True, hide_index=True)
+            else:
+                st.write("Belum ada riwayat transaksi.")
 
     # --- TAB 2: TRADING HISTORY ---
     with tab2:
