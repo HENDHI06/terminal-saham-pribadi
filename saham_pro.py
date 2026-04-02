@@ -94,9 +94,7 @@ def sell_position(u, row_id, ticker, buy_p, sell_p, total_lots, sold_lots):
             return f"✅ PARTIAL_SELL: {sold_lots} Lots of {ticker} Sold!"
         else:
             # Jika habis, hapus dari portfolio
-            conn.execute("DELETE FROM portfolio WHERE id = ?", (row_id))
-            return f"🔥 FULL_SELL: {ticker} Position Closed!"
-
+            conn.execute("DELETE FROM portfolio WHERE id = ?", (row_id,))
 def get_user_portfolio(u, r):
     conn = sqlite3.connect('users.db')
     if r == 'admin':
