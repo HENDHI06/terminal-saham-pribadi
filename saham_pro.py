@@ -1119,15 +1119,15 @@ elif menu == "MONEY MANAGEMENT":
             st.info("Portfolio kosong. Mulai dengan menambahkan posisi baru!")
 
     # --- TAB 2: TRADING HISTORY ---
-    with tab2:
-        # Implementasi Trading History kamu di sini
-        st.subheader("📜 TRADING_LOG")
-        with sqlite3.connect('users.db') as conn:
-            df_hist = pd.read_sql_query("SELECT * FROM history WHERE username=?", conn, params=(user_now,))
-            if not df_hist.empty:
-                st.dataframe(df_hist.sort_values('date', ascending=False), use_container_width=True, hide_index=True)
-            else:
-                st.write("Belum ada riwayat transaksi.")
+   ### with tab2:
+    ##    # Implementasi Trading History kamu di sini
+     #   st.subheader("📜 TRADING_LOG")
+    #    with sqlite3.connect('users.db') as conn:
+     #       df_hist = pd.read_sql_query("SELECT * FROM history WHERE username=?", conn, params=(user_now,))
+      #      if not df_hist.empty:
+      #          st.dataframe(df_hist.sort_values('date', ascending=False), use_container_width=True, hide_index=True)
+      #      else:
+            #    st.write("Belum ada riwayat transaksi.")
 
     # --- TAB 2: TRADING HISTORY ---
     with tab2:
