@@ -213,71 +213,130 @@ def load_tickers():
 
 def draw_mobile_cards(df):
     for _, row in df.iterrows():
-        chg_color = "#ccff00" if row['CHG%'] > 0 else "#ff4b4b"
+        chg = row.get('CHG%', 0)
+        chg_color = "#ccff00" if chg > 0 else "#ff4b4b"
+
         st.markdown(f"""
         <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(204, 255, 0, 0.2); 
                     border-radius: 12px; padding: 15px; margin-bottom: 12px; border-left: 5px solid {chg_color};">
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <b style="font-size: 1.2rem; color: #ccff00;">{row['TICKER']}</b>
-                <span style="color: {chg_color}; font-weight: bold;">{row['CHG%']}% {row['VOL_S']}</span>
+                <b style="font-size: 1.2rem; color: #ccff00;">{row.get('TICKER','-')}</b>
+                <span style="color: {chg_color}; font-weight: bold;">
+                    {row.get('CHG%',0)}% {row.get('VOL_S','-')}
+                </span>
             </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; font-size: 0.85rem; color: #bbb;">
-                <div>Last: <b style="color:#fff;">{row['LAST']}</b></div>
-                <div>Value: <b style="color:#fff;">{row['VAL(M)']}M</b></div>
-                <div style="color: #00ffff;">Entry: {row['ENTRY']}</div>
-                <div style="color: #00ff00;">TP: {row['TP']}</div>
-                <div style="color: #ff4b4b;">CL: {row['CL']}</div>
+                <div>Last: <b style="color:#fff;">{row.get('LAST','-')}</b></div>
+                <div>Value: <b style="color:#fff;">{row.get('VAL(M)',0)}M</b></div>
+                <div style="color: #00ffff;">Entry: {row.get('ENTRY','-')}</div>
+                <div style="color: #00ff00;">TP1: {row.get('TP1','-')}</div>
+<div style="color: #00ff00;">TP2: {row.get('TP2','-')}</div>
+                <div style="color: #ff4b4b;">CL: {row.get('CL','-')}</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
 def run_scan(tickers, mode):
+    import pandas as pd
+    import yfinance as yf
+    from datetime import datetime
+    import streamlit as st
+
+    # 1. Pastikan Ticker Unik (Cegah Duplikasi dari Input)
+    tickers = list(set(tickers))
     results = []
-    # Buat Progress Bar di UI
-    progress_text = "Operation in progress. Please wait."
-    my_bar = st.progress(0, text=progress_text)
+
+    # 2. Parameter Berdasarkan Mode
+    if mode == "Santai":
+        min_chg, min_rsi, min_val, vol_m = 1.5, 45, 100_000_000, 1.1
+    elif mode == "Profesional":
+        min_chg, min_rsi, min_val, vol_m = 2.5, 55, 1_000_000_000, 1.4
+    elif mode == "Ketat":
+        min_chg, min_rsi, min_val, vol_m = 4.0, 60, 2_000_000_000, 1.8
+    else:
+        min_chg, min_rsi, min_val, vol_m = 2.0, 50, 500_000_000, 1.3
+
+    # 3. UI Progress
+    progress = st.progress(0, text="📡 Menghubungkan ke Server Bursa...")
     
-    total_tickers = len(tickers)
-    min_chg = 4.0 if mode == "Ketat" else 2.0
+    # 4. Download Data sekaligus (Batch) untuk mempercepat
+    try:
+        data = yf.download(tickers, period="1mo", interval="1d", group_by="ticker", threads=True, progress=False)
+    except Exception as e:
+        st.error(f"Gagal mendownload data: {e}")
+        return pd.DataFrame()
 
-    for idx, t in enumerate(tickers):
-        # Update Progress Bar (Hitung Persentase)
-        percent_complete = (idx + 1) / total_tickers
-        my_bar.progress(percent_complete, text=f"🔍 SCANNING {idx+1}/{total_tickers} TICKERS ({int(percent_complete*100)}%)")
-        
+    total = len(tickers)
+
+    # 5. Loop Analisis
+    for i, t in enumerate(tickers):
         try:
-            full_t = f"{t}.JK"
-            # Pakai period lebih pendek biar kenceng (misal 30d)
-            df = yf.download(full_t, period="30d", interval="1d", progress=False)
+            # Update Progress Bar
+            percent = int((i + 1) / total * 100)
+            progress.progress(percent, text=f"🔍 Menganalisis {t} ({percent}%)")
+
+            # Ambil DataFrame per ticker
+            df = data[t].copy() if len(tickers) > 1 else data.copy()
             
-            if df.empty or len(df) < 20: continue
+            # Fix Multi-Index Column
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
+
+            if df.empty or len(df) < 15: continue
+
+            # Ambil data harga terakhir & sebelumnya
+            c_now = df['Close'].iloc[-1]
+            c_prev = df['Close'].iloc[-2]
             
-            # --- Logika Scan Kamu ---
-            df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
-            c_now, c_prev = df['Close'].iloc[-1], df['Close'].iloc[-2]
+            if pd.isna(c_now) or pd.isna(c_prev): continue
+
+            # Kalkulasi Indikator
             chg = ((c_now - c_prev) / c_prev) * 100
-            
-            # Filter Volume & Indikator
-            avg_vol = df['Volume'].tail(5).mean()
-            if (avg_vol * c_now) < 500_000_000: continue 
-
+            val_tr = df['Volume'].iloc[-1] * c_now
             ma20 = df['Close'].rolling(20).mean().iloc[-1]
-            delta = df['Close'].diff(); g = (delta.where(delta > 0, 0)).rolling(14).mean(); l = (-delta.where(delta < 0, 0)).rolling(14).mean()
-            rsi = 100 - (100 / (1 + (g.iloc[-1]/l.iloc[-1])))
+            
+            # RSI 14
+            delta = df['Close'].diff()
+            gain = (delta.where(delta > 0, 0)).rolling(14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+            rs = gain.iloc[-1] / loss.iloc[-1] if loss.iloc[-1] != 0 else 0
+            rsi = 100 - (100 / (1 + rs))
 
-            sig = "🔎 WATCH"
-            if chg >= min_chg: sig = "🚀 BSJP"
-            elif c_now > ma20 and 45 < rsi < 70: sig = "💎 HOLD"
+            # Breakout Logic
+            high_20 = df['High'].rolling(20).max().iloc[-2]
+            vol_avg = df['Volume'].rolling(20).mean().iloc[-1]
+            is_breakout = (c_now > high_20) and (df['Volume'].iloc[-1] > vol_avg * vol_m)
+
+            # --- FILTER UTAMA ---
+            # Jika tidak masuk kriteria minimal, lewati (Cegah Tabel Dobel/Sampah)
+            if chg < min_chg or val_tr < min_val:
+                continue
+
+            # Scoring AI
+            score = (chg * 0.4) + (rsi * 0.2) + ((val_tr / 1e9) * 0.2) + (10 if is_breakout else 0)
 
             results.append({
-                "TICKER": t, "LAST": int(c_now), "CHG%": round(chg, 2),
-                "RSI": round(rsi, 1), "REKOMENDASI": sig, "FULL": full_t
+                "TICKER": t.replace(".JK", ""),
+                "LAST": int(c_now),
+                "CHG%": round(chg, 2),
+                "RSI": round(rsi, 1),
+                "VAL(M)": round(val_tr / 1_000_000, 1),
+                "AI_SCORE": round(score, 2),
+                "BREAKOUT": "YES" if is_breakout else "NO",
+                "REKOMENDASI": "🚀 BSJP" if chg > 4 else "💎 HOLD" if c_now > ma20 else "🔎 WATCH",
+                "FULL": t
             })
-        except: continue
+        except:
+            continue
+
+    progress.empty() # Hilangkan progress bar setelah selesai
+
+    # 6. Return DataFrame Final (Hanya 1 Tabel Bersih)
+    df_result = pd.DataFrame(results)
+    if not df_result.empty:
+        return df_result.sort_values(by="AI_SCORE", ascending=False).drop_duplicates(subset=['TICKER'])
     
-    # Hapus bar setelah selesai
-    my_bar.empty()
-    return pd.DataFrame(results)
+    return pd.DataFrame()
 
 # --- 4. NAVIGATION ---
 role = st.session_state["auth"]["role"]
@@ -305,8 +364,15 @@ if st.sidebar.button("🔴 TERMINATE SESSION", width="stretch"):
 # --- 5. CONTENT AREA: STRATEGY SCANNER ---
 if menu == "STRATEGY SCANNER":
     st.title("🛰️ MARKET_INTELLIGENCE")
+    st.info("📊 Scan optimal saat jam market (09:00 - 15:00 WIB)")
+
+    # 🔍 DEBUG TICKER
+    tickers = load_tickers()
+    st.write("Jumlah ticker:", len(tickers))
     
-    # 1. Monitor IHSG
+    # =========================
+    # 1. IHSG MONITOR
+    # =========================
     try:
         ihsg_hist = yf.Ticker("^JKSE").history(period="2d")
         if len(ihsg_hist) >= 2:
@@ -318,76 +384,219 @@ if menu == "STRATEGY SCANNER":
                     IHSG: <span style='color:{clr}; font-weight:bold;'>{curr_c:,.2f} ({diff:+.2f})</span>
                 </div>
             """, unsafe_allow_html=True)
-    except: pass
+    except:
+        pass
 
-    # 2. Kontrol Scan & Sensitivity
-    c_algo, c_sync = st.columns([4, 1])
-    with c_algo: 
-        mode_scan = st.radio("ALGO_SENSITIVITY", ["Ketat", "Agresif"], horizontal=True)
-    with c_sync:
-        if st.button("🔄 REFRESH", use_container_width=True):
-            st.rerun()
+# =========================
+# CONTROL PANEL
+# =========================
+c1, c2 = st.columns([4,1])
 
-    if st.button("⚡ EXECUTE_DEEP_SCAN", use_container_width=True):
-        # Langsung panggil, progress bar sudah ada di dalam fungsi run_scan
-        st.session_state.results = run_scan(load_tickers(), mode_scan)
-        st.session_state.scan_time = datetime.now().strftime("%H:%M:%S")
+with c1:
+    mode_scan = st.radio(
+        "ALGO_SENSITIVITY",
+        ["Santai", "Profesional", "Ketat"],
+        horizontal=True,
+        key="mode_scan_main"
+    )
+
+with c2:
+    if st.button("🔄 REFRESH", use_container_width=True):
         st.rerun()
 
-    # 3. Hasil Analisis (Dashboard & Tabel)
-    if 'results' in st.session_state and not st.session_state.results.empty:
-        df = st.session_state.results
-        st.caption(f"Last Sync: {st.session_state.scan_time} WIB")
-        
-        # --- FITUR BARU: STRATEGY INSIGHT (METRICS) ---
-        st.markdown("### 🌟 STRATEGY_INSIGHT")
-        col_a, col_b = st.columns(2)
-        
-        with col_a:
-            st.markdown("<p style='color:#ccff00; font-weight:bold;'>🚀 TOP BSJP (SCALPING)</p>", unsafe_allow_html=True)
-            # Filter otomatis: Hanya yang berlabel BSJP & kenaikan tertinggi
-            df_bsjp = df[df['REKOMENDASI'].str.contains("BSJP", na=False)].sort_values(by='CHG%', ascending=False).head(3)
-            if not df_bsjp.empty:
-                m_cols = st.columns(len(df_bsjp))
-                for idx, (i, r) in enumerate(df_bsjp.iterrows()):
-                    m_cols[idx].metric(label=r['TICKER'], value=f"{int(r['LAST'])}", delta=f"{r['CHG%']}%")
-            else:
-                st.info("No BSJP signal found (Kriteria Belum Terpenuhi)")
 
-        with col_b:
-            st.markdown("<p style='color:#00ffff; font-weight:bold;'>💎 TOP HOLD (TREND SWING)</p>", unsafe_allow_html=True)
-            # Filter otomatis: Hanya yang berlabel HOLD & RSI paling optimal
-            df_hold = df[df['REKOMENDASI'].str.contains("HOLD", na=False)].sort_values(by='RSI', ascending=False).head(3)
-            if not df_hold.empty:
-                m_cols = st.columns(len(df_hold))
-                for idx, (i, r) in enumerate(df_hold.iterrows()):
-                    m_cols[idx].metric(label=r['TICKER'], value=f"{int(r['LAST'])}", delta=f"RSI: {r['RSI']}")
-            else:
-                st.info("No stable trend found.")
-        
+# =========================
+# BUTTON SCAN
+# =========================
+if st.button("⚡ EXECUTE_DEEP_SCAN", use_container_width=True):
+
+    # Loading sederhana
+    progress = st.progress(0)
+    for i in range(100):
+        progress.progress(i + 1)
+
+    # Jalankan scan
+    result = run_scan(tickers, mode_scan)
+
+    progress.empty()
+
+    # Simpan hasil
+    st.session_state.results = result
+    st.session_state.scan_time = datetime.now().strftime("%H:%M:%S")
+
+
+# 3. Hasil Analisis (Dashboard & Tabel)
+if 'results' in st.session_state:
+    df = st.session_state.results
+
+    # ✅ TAMBAHKAN DI SINI
+    st.markdown(f"""
+    <div style='
+        background: rgba(0,255,0,0.05);
+        padding:10px;
+        border-left:5px solid #00ff00;
+        margin-bottom:10px;
+    '>
+    🧠 AI STATUS: <b>SCAN COMPLETE</b><br>
+    ⏱ TIME: {st.session_state.scan_time}<br>
+    📊 DATA: {len(st.session_state.results)} STOCKS ANALYZED
+    </div>
+    """, unsafe_allow_html=True)
+
+    if df is None or df.empty:
+        st.warning("⚠️ Tidak ada saham lolos filter (coba mode Agresif / jam market)")
+    else:
+        st.success(f"✅ Ditemukan {len(df)} saham potensial")
+        st.caption(f"Last Sync: {st.session_state.scan_time} WIB")
+
+        # 🔥 AI TOP PICKS
+        st.markdown("### 🔥 TOP AI PICKS")
+        top3 = df.head(3)
+        st.dataframe(top3, use_container_width=True, hide_index=True)
+
+        # 🔥 BREAKOUT HUNTER
+        st.markdown("### 🔥 BREAKOUT HUNTER")
+        df_bo = df[df['BREAKOUT'] == "YES"]
+
+        if not df_bo.empty:
+            st.dataframe(df_bo, use_container_width=True, hide_index=True)
+        else:
+            st.info("No breakout detected")
+
+        # 🧠 ELITE PICKS
+        st.markdown("### 🧠 ELITE PICKS")
+        elite = df[df['AI_SCORE'] > df['AI_SCORE'].mean()].head(5)
+        st.dataframe(elite, use_container_width=True, hide_index=True)
+
         st.markdown("---")
 
-        # 4. Tabel Tampilan (Desktop & Mobile)
-        tab_desk, tab_mob = st.tabs(["🖥️ DESKTOP VIEW", "📱 MOBILE VIEW"])
-        with tab_desk: 
-            st.dataframe(df.drop(columns=['FULL']), use_container_width=True, hide_index=True)
-        with tab_mob: 
-            draw_mobile_cards(df) # Pastikan fungsi ini ada di file kamu
+        # 📊 FULL TABLE
+        st.markdown("### 📊 FULL RESULT")
+        st.dataframe(df, use_container_width=True, hide_index=True)
 
-        # 5. Interactive Chart Analysis
+        df = st.session_state.results.copy()
+        st.caption(f"Last Sync: {st.session_state.scan_time} WIB")
+
+        # =========================
+        # 🧠 AI SCORING SAFE
+        # =========================
+        for col in ['CHG%', 'RSI', 'VAL(M)']:
+            if col not in df.columns:
+                df[col] = 0
+
+        df['AI_SCORE'] = (
+            df['CHG%'] * 0.4 +
+            df['RSI'] * 0.3 +
+            df['VAL(M)'] * 0.3
+        )
+
+        # =========================
+        # 🧠 AI TOP PICKS
+        # =========================
+        st.markdown("### 🧠 AI TOP PICKS")
+        top3 = df.sort_values(by='AI_SCORE', ascending=False).head(3)
+        st.dataframe(top3, use_container_width=True, hide_index=True)
+
+        # =========================
+        # 🔥 BREAKOUT HUNTER
+        # =========================
+        st.markdown("### 🔥 BREAKOUT HUNTER")
+
+        if 'BREAKOUT' in df.columns:
+            df_bo = df[df['BREAKOUT'] == "YES"]
+        else:
+            df_bo = pd.DataFrame()
+
+        if not df_bo.empty:
+            st.dataframe(df_bo, use_container_width=True, hide_index=True)
+        else:
+            st.info("No breakout detected")
+
+        # =========================
+        # 🧠 ELITE PICKS
+        # =========================
+        st.markdown("### 🧠 ELITE PICKS")
+
+        elite = df[df['AI_SCORE'] > df['AI_SCORE'].mean()].head(5)
+
+        if not elite.empty:
+            st.dataframe(elite, use_container_width=True, hide_index=True)
+        else:
+            st.info("No elite picks")
+
+        # =========================
+        # 🌟 STRATEGY INSIGHT
+        # =========================
+        st.markdown("### 🌟 STRATEGY_INSIGHT")
+        col_a, col_b = st.columns(2)
+
+        with col_a:
+            st.markdown("<p style='color:#ccff00; font-weight:bold;'>🚀 TOP BUY</p>", unsafe_allow_html=True)
+
+            df_buy = df[df['REKOMENDASI'].str.contains("BUY|BSJP", na=False)].head(3)
+
+            if not df_buy.empty:
+                m_cols = st.columns(len(df_buy))
+                for idx, (_, r) in enumerate(df_buy.iterrows()):
+                    m_cols[idx].metric(r['TICKER'], int(r['LAST']), f"{r['CHG%']}%")
+            else:
+                st.info("No strong buy")
+
+        with col_b:
+            st.markdown("<p style='color:#00ffff; font-weight:bold;'>💎 TOP HOLD</p>", unsafe_allow_html=True)
+
+            df_hold = df[df['REKOMENDASI'].str.contains("HOLD", na=False)].head(3)
+
+            if not df_hold.empty:
+                m_cols = st.columns(len(df_hold))
+                for idx, (_, r) in enumerate(df_hold.iterrows()):
+                    m_cols[idx].metric(r['TICKER'], int(r['LAST']), f"RSI {r['RSI']}")
+            else:
+                st.info("No hold trend")
+
+        st.markdown("---")
+
+        # =========================
+        # TABLE VIEW
+        # =========================
+        tab1, tab2 = st.tabs(["🖥️ DESKTOP", "📱 MOBILE"])
+
+        with tab1:
+            st.dataframe(df.drop(columns=['FULL'], errors='ignore'),
+                         use_container_width=True,
+                         hide_index=True)
+
+        with tab2:
+            draw_mobile_cards(df)
+
+        # =========================
+        # 📈 CHART ANALYSIS
+        # =========================
         st.markdown("### 📈 FOCUS_TARGET_ANALYSIS")
-        sel_t = st.selectbox("PILIH SAHAM UNTUK ANALISIS LANJUTAN", df['TICKER'].tolist())
+
+        sel_t = st.selectbox("PILIH SAHAM", df['TICKER'].tolist())
         full_t = df[df['TICKER'] == sel_t]['FULL'].values[0]
-        
+
         c_data = yf.download(full_t, period="6mo", interval="1d", progress=False)
+
         if not c_data.empty:
-            # Perbaikan Multi-Index Header
             c_data.columns = [c[0] if isinstance(c, tuple) else c for c in c_data.columns]
-            
+
             fig = go.Figure(data=[go.Candlestick(
-                x=c_data.index, open=c_data['Open'], high=c_data['High'], low=c_data['Low'], close=c_data['Close'], name="Price"
+                x=c_data.index,
+                open=c_data['Open'],
+                high=c_data['High'],
+                low=c_data['Low'],
+                close=c_data['Close']
             )])
-            fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=450, margin=dict(l=0, r=0, t=0, b=0))
+
+            fig.update_layout(
+                template="plotly_dark",
+                height=450,
+                margin=dict(l=0, r=0, t=0, b=0),
+                xaxis_rangeslider_visible=False
+            )
+
             st.plotly_chart(fig, use_container_width=True)
 
 elif menu == "FUNDAMENTAL ANALYZER":
