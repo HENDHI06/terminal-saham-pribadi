@@ -12,6 +12,41 @@ import requests
 import pytz 
 
 
+def get_trend_signals(ticker_list):
+    signals = []
+    for ticker in ticker_list:
+        try:
+            # Ambil data 6 bulan terakhir
+            df = yf.download(f"{ticker}.JK", period="6mo", interval="1d", progress=False)
+            if df.empty: continue
+            
+            # Hitung MA 20 dan MA 50
+            df['MA20'] = ta.sma(df['Close'], length=20)
+            df['MA50'] = ta.sma(df['Close'], length=50)
+            
+            # Ambil nilai terakhir dan sebelumnya
+            last_ma20 = df['MA20'].iloc[-1]
+            last_ma50 = df['MA50'].iloc[-1]
+            prev_ma20 = df['MA20'].iloc[-2]
+            prev_ma50 = df['MA50'].iloc[-2]
+            
+            current_price = df['Close'].iloc[-1]
+            
+            # Logika Golden Cross: MA20 memotong ke atas MA50
+            if prev_ma20 < prev_ma50 and last_ma20 > last_ma50:
+                signals.append({"ticker": ticker, "status": "GOLDEN CROSS", "price": current_price, "color": "#00ff00"})
+            
+            # Logika Dead Cross: MA20 memotong ke bawah MA50
+            elif prev_ma20 > prev_ma50 and last_ma20 < last_ma50:
+                signals.append({"ticker": ticker, "status": "DEAD CROSS", "price": current_price, "color": "#ff0000"})
+                
+        except:
+            continue
+    return signals
+
+
+
+
 # --- 0. CONFIG & DATABASE SETUP ---
 warnings.filterwarnings("ignore", category=FutureWarning)
 st.set_page_config(page_title="IDX CYBER TERMINAL", page_icon="⚡", layout="wide")
@@ -531,7 +566,8 @@ st.sidebar.markdown(f"""
     """, unsafe_allow_html=True)
 
 # List Menu
-menu_list = ["SCANNER", "FUNDAMENTAL", "TICKER COMPARISON", "MARKET_NEWS", "MONEY MANAGEMENT", "SECURITY SETTINGS"]
+menu_list = ["SCANNER", "STRATEGY SCANNER", "FUNDAMENTAL", "MARKET_NEWS", "SECURITY SETTINGS"]
+menu = st.sidebar.radio("Navigation", menu_list)
 if role == "admin": 
     menu_list.insert(1, "USER MANAGEMENT")
 
@@ -544,7 +580,7 @@ if st.sidebar.button("🔴 TERMINATE SESSION", use_container_width=True):
     st.session_state["auth"] = {"logged_in": False}
     st.rerun()
 
-# --- 5. CONTENT AREA: STRATEGY SCANNER ---
+# --- 5. CONTENT AREA: SCANNER ---
 if menu == "SCANNER":
     st.title("🛰️ MARKET_INTELLIGENCE")
     st.info("📊 Scan optimal saat jam market (09:00 - 15:00 WIB)")
@@ -680,6 +716,34 @@ if menu == "SCANNER":
                     )])
                     fig.update_layout(template="plotly_dark", height=400, margin=dict(l=0,r=0,t=0,b=0), xaxis_rangeslider_visible=False)
                     st.plotly_chart(fig, use_container_width=True)
+
+elif menu == "STRATEGY SCANNER":
+    st.markdown("<h2 style='color:#ccff00;'>⚡ AUTOMATIC STRATEGY SCANNER</h2>", unsafe_allow_html=True)
+    st.write("Sistem ini mendeteksi perpotongan Moving Average (MA20 vs MA50) secara Real-Time.")
+    
+    # Daftar saham yang mau dipantau (Bisa kamu tambah sendiri)
+    watchlist = ["BBCA", "BBRI", "BMRI", "ASII", "TLKM", "GOTO", "ADRO", "UNVR", "AMMN", "BBNI"]
+    
+    if st.button("🚀 MULAI SCANNING SEKARANG"):
+        with st.spinner("Sedang menganalisa chart..."):
+            results = get_trend_signals(watchlist)
+            
+            if results:
+                for res in results:
+                    st.markdown(f"""
+                    <div style="border: 1px solid {res['color']}; padding: 15px; border-radius: 10px; margin-bottom: 10px;">
+                        <h3 style="color:{res['color']}; margin:0;">{res['status']} Detected!</h3>
+                        <p style="margin:5px 0;">Saham: <b>{res['ticker']}</b> | Harga: Rp {res['price']:,.0f}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                if any(r['status'] == "GOLDEN CROSS" for r in results):
+                    st.balloons()
+            else:
+                st.info("Belum ada sinyal Golden Cross atau Dead Cross hari ini pada Watchlist kamu.")
+    
+    st.caption("Tips: Golden Cross sering dianggap sebagai awal dari tren naik jangka panjang.")
+
 
 elif menu == "FUNDAMENTAL":
     st.markdown("""
