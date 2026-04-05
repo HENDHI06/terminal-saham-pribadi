@@ -566,7 +566,7 @@ st.sidebar.markdown(f"""
     """, unsafe_allow_html=True)
 
 # List Menu
-menu_list = ["SCANNER", "STRATEGY SCANNER", "FUNDAMENTAL", "MARKET_NEWS", "SECURITY SETTINGS"]
+menu_list = ["SCANNER", "STRATEGY SCANNER", "FUNDAMENTAL","TICKER COMPARISON", "MARKET_NEWS","MONEY MANAGEMENT", "SECURITY SETTINGS"]
 if role == "admin": 
     menu_list.insert(1, "USER MANAGEMENT")
 
