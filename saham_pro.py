@@ -567,7 +567,6 @@ st.sidebar.markdown(f"""
 
 # List Menu
 menu_list = ["SCANNER", "STRATEGY SCANNER", "FUNDAMENTAL", "MARKET_NEWS", "SECURITY SETTINGS"]
-menu = st.sidebar.radio("Navigation", menu_list)
 if role == "admin": 
     menu_list.insert(1, "USER MANAGEMENT")
 
