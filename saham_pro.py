@@ -720,26 +720,41 @@ elif menu == "STRATEGY SCANNER":
     st.markdown("<h2 style='color:#ccff00;'>⚡ AUTOMATIC STRATEGY SCANNER</h2>", unsafe_allow_html=True)
     st.write("Sistem ini mendeteksi perpotongan Moving Average (MA20 vs MA50) secara Real-Time.")
     
-    # Daftar saham yang mau dipantau (Bisa kamu tambah sendiri)
-    watchlist = ["BBCA", "BBRI", "BMRI", "ASII", "TLKM", "GOTO", "ADRO", "UNVR", "AMMN", "BBNI"]
+    # --- MODIFIKASI DISINI ---
+    try:
+        # Membaca file excel
+        df_saham = pd.read_excel("daftar_saham.xlsx")
+        
+        # Mengambil kolom ticker (sesuaikan nama kolomnya, misal 'Ticker')
+        # .tolist() mengubahnya menjadi list seperti format sebelumnya
+        watchlist = df_saham['Ticker'].tolist() 
+        
+        st.success(f"Berhasil memuat {len(watchlist)} saham dari Excel.")
+    except Exception as e:
+        st.error(f"Gagal membaca file Excel: {e}")
+        watchlist = [] # Kosongkan jika error agar tidak crash
+    # -------------------------
     
     if st.button("🚀 MULAI SCANNING SEKARANG"):
-        with st.spinner("Sedang menganalisa chart..."):
-            results = get_trend_signals(watchlist)
-            
-            if results:
-                for res in results:
-                    st.markdown(f"""
-                    <div style="border: 1px solid {res['color']}; padding: 15px; border-radius: 10px; margin-bottom: 10px;">
-                        <h3 style="color:{res['color']}; margin:0;">{res['status']} Detected!</h3>
-                        <p style="margin:5px 0;">Saham: <b>{res['ticker']}</b> | Harga: Rp {res['price']:,.0f}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
+        if not watchlist:
+            st.warning("Daftar saham kosong. Periksa kembali file Excel Anda.")
+        else:
+            with st.spinner(f"Sedang menganalisa {len(watchlist)} saham..."):
+                results = get_trend_signals(watchlist)
                 
-                if any(r['status'] == "GOLDEN CROSS" for r in results):
-                    st.balloons()
-            else:
-                st.info("Belum ada sinyal Golden Cross atau Dead Cross hari ini pada Watchlist kamu.")
+                if results:
+                    for res in results:
+                        st.markdown(f"""
+                        <div style="border: 1px solid {res['color']}; padding: 15px; border-radius: 10px; margin-bottom: 10px;">
+                            <h3 style="color:{res['color']}; margin:0;">{res['status']} Detected!</h3>
+                            <p style="margin:5px 0;">Saham: <b>{res['ticker']}</b> | Harga: Rp {res['price']:,.0f}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    if any(r['status'] == "GOLDEN CROSS" for r in results):
+                        st.balloons()
+                else:
+                    st.info("Belum ada sinyal Golden Cross atau Dead Cross hari ini.")
     
     st.caption("Tips: Golden Cross sering dianggap sebagai awal dari tren naik jangka panjang.")
 
