@@ -720,26 +720,33 @@ elif menu == "STRATEGY SCANNER":
     st.markdown("<h2 style='color:#ccff00;'>⚡ AUTOMATIC STRATEGY SCANNER</h2>", unsafe_allow_html=True)
     st.write("Sistem ini mendeteksi perpotongan Moving Average (MA20 vs MA50) secara Real-Time.")
     
-    # --- MODIFIKASI DISINI ---
     try:
-        # Membaca file excel
+        # 1. Baca file excel
         df_saham = pd.read_excel("daftar_saham.xlsx")
         
-        # Mengambil kolom ticker (sesuaikan nama kolomnya, misal 'Ticker')
-        # .tolist() mengubahnya menjadi list seperti format sebelumnya
-        watchlist = df_saham['Ticker'].tolist() 
+        # 2. Ambil kolom 'Kode', bersihkan spasi, dan tambahkan '.JK'
+        # Kita gunakan dropna() agar baris kosong di excel tidak ikut terbaca
+        raw_tickers = df_saham['Kode'].dropna().astype(str).tolist()
+        watchlist = [t.strip() + ".JK" for t in raw_tickers]
         
-        st.success(f"Berhasil memuat {len(watchlist)} saham dari Excel.")
+        st.success(f"✅ Berhasil memuat {len(watchlist)} saham dari kolom 'Kode'.")
+        
+        # Optional: Tampilkan preview 5 saham pertama agar yakin benar
+        st.caption(f"Preview ticker: {', '.join(watchlist[:5])}...")
+
+    except KeyError:
+        st.error("Error: Kolom bernama 'Kode' tidak ditemukan di file Excel.")
+        watchlist = []
     except Exception as e:
-        st.error(f"Gagal membaca file Excel: {e}")
-        watchlist = [] # Kosongkan jika error agar tidak crash
-    # -------------------------
-    
+        st.error(f"Gagal membaca file: {e}")
+        watchlist = []
+
+    # Tombol jalankan scanner
     if st.button("🚀 MULAI SCANNING SEKARANG"):
         if not watchlist:
-            st.warning("Daftar saham kosong. Periksa kembali file Excel Anda.")
+            st.warning("Daftar saham kosong!")
         else:
-            with st.spinner(f"Sedang menganalisa {len(watchlist)} saham..."):
+            with st.spinner(f"Menganalisa {len(watchlist)} saham..."):
                 results = get_trend_signals(watchlist)
                 
                 if results:
@@ -754,9 +761,7 @@ elif menu == "STRATEGY SCANNER":
                     if any(r['status'] == "GOLDEN CROSS" for r in results):
                         st.balloons()
                 else:
-                    st.info("Belum ada sinyal Golden Cross atau Dead Cross hari ini.")
-    
-    st.caption("Tips: Golden Cross sering dianggap sebagai awal dari tren naik jangka panjang.")
+                    st.info("Tidak ada sinyal yang terdeteksi saat ini.")
 
 
 elif menu == "FUNDAMENTAL":
